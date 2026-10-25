@@ -44,7 +44,7 @@ export function OverviewCard({ data }: { data: Overview | null }) {
         {kpis.map((k) => (
           <button
             key={k.key}
-            className={`border-stone-100 px-5 py-4 text-left lg:border-r ${k.metric ? 'hover:bg-stone-50' : 'cursor-default'}`}
+            className={`border-stone-100 px-4 py-3 text-left sm:px-5 sm:py-4 lg:border-r ${k.metric ? 'hover:bg-stone-50' : 'cursor-default'}`}
             onClick={() => k.metric && setHidden((h) => ({ ...h, [k.metric!]: !h[k.metric!] }))}
             title={k.metric ? 'Show/hide on chart' : undefined}
           >
@@ -52,22 +52,22 @@ export function OverviewCard({ data }: { data: Overview | null }) {
               {k.dot && <span className={`h-2.5 w-2.5 rounded-sm ${k.dot} ${hidden[k.metric!] ? 'opacity-25' : ''}`} />}
               {k.label}
             </div>
-            <div className="mt-1 text-[28px] font-semibold leading-tight tracking-tight">{k.value}</div>
+            <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight tracking-tight">{k.value}</div>
             <Change cur={c![k.key as keyof Kpis]} prev={p![k.key as keyof Kpis]} invert={k.invert} />
           </button>
         ))}
         {data && (
-          <div className="px-5 py-4">
+          <div className="px-4 py-3 sm:px-5 sm:py-4">
             <div className="flex items-center gap-1.5 text-sm text-stone-500">
               Online <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
             </div>
-            <div className="mt-1 text-[28px] font-semibold leading-tight">{data.online}</div>
+            <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight">{data.online}</div>
           </div>
         )}
         {!data && <div className="col-span-full h-[98px] animate-pulse bg-stone-50" />}
       </div>
 
-      <div className="h-[340px] px-2 pb-3 pt-6 sm:px-4">
+      <div className="h-[260px] px-2 pb-3 pt-6 sm:h-[340px] sm:px-4">
         {data && (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data.series} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>

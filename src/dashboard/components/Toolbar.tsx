@@ -23,7 +23,17 @@ const GRANULARITIES = [
   { value: 'month', label: 'Monthly' },
 ];
 
-export function Dropdown({ button, children, align = 'left' }: { button: ReactNode; children: (close: () => void) => ReactNode; align?: 'left' | 'right' }) {
+export function Dropdown({
+  button,
+  children,
+  align = 'left',
+  className = '',
+}: {
+  button: ReactNode;
+  children: (close: () => void) => ReactNode;
+  align?: 'left' | 'right';
+  className?: string;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,8 +43,8 @@ export function Dropdown({ button, children, align = 'left' }: { button: ReactNo
     return () => document.removeEventListener('mousedown', on);
   }, [open]);
   return (
-    <div className="relative flex" ref={ref}>
-      <div className="flex" onClick={() => setOpen((o) => !o)}>
+    <div className={`relative flex ${className}`} ref={ref}>
+      <div className="flex flex-1" onClick={() => setOpen((o) => !o)}>
         {button}
       </div>
       {open && (
@@ -97,6 +107,7 @@ export function Toolbar({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Dropdown
+        className="order-1 min-w-0 sm:order-none"
         button={
           <button className="btn h-11 px-4 text-base">
             <Favicon domain={site.domain} size={22} />
@@ -130,83 +141,88 @@ export function Toolbar({
         )}
       </Dropdown>
 
-      <div className="flex h-11 items-stretch rounded-xl border border-stone-200 bg-white shadow-card">
-        <button className="rounded-l-xl px-3 text-xl text-stone-500 hover:bg-stone-50" onClick={() => shift(-1)} aria-label="Previous period">
-          ‹
-        </button>
+      {/* Phones: the date range and granularity get their own full-width row. */}
+      <div className="order-3 flex w-full gap-2 sm:contents">
+        <div className="flex h-11 flex-1 items-stretch rounded-xl border border-stone-200 bg-white shadow-card sm:flex-initial">
+          <button className="rounded-l-xl px-3 text-xl text-stone-500 hover:bg-stone-50" onClick={() => shift(-1)} aria-label="Previous period">
+            ‹
+          </button>
+          <Dropdown
+            className="flex-1"
+            button={
+              <button className="flex h-full w-full items-center justify-center gap-2 whitespace-nowrap border-x border-stone-200 px-4 text-base font-medium hover:bg-stone-50">
+                {label} <Chevron />
+              </button>
+            }
+          >
+            {(close) => (
+              <>
+                {PERIODS.map((p) => (
+                  <button
+                    key={p.value}
+                    className={itemCls(q.period === p.value)}
+                    onClick={() => {
+                      close();
+                      update({ period: p.value, granularity: undefined });
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-stone-100" />
+                <form
+                  className="space-y-2 p-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!from || !to) return;
+                    close();
+                    update({ period: 'custom', from, to: to < from ? from : to, granularity: undefined });
+                  }}
+                >
+                  <div className="text-xs font-medium text-stone-500">Custom range</div>
+                  <input type="date" className="input py-1.5" value={from} onChange={(e) => setFrom(e.target.value)} />
+                  <input type="date" className="input py-1.5" value={to} onChange={(e) => setTo(e.target.value)} />
+                  <button className="btn-dark w-full py-1.5">Apply</button>
+                </form>
+              </>
+            )}
+          </Dropdown>
+          <button
+            className="rounded-r-xl px-3 text-xl text-stone-500 hover:bg-stone-50 disabled:opacity-30"
+            onClick={() => shift(1)}
+            disabled={!canForward}
+            aria-label="Next period"
+          >
+            ›
+          </button>
+        </div>
+
         <Dropdown
+          align="right"
           button={
-            <button className="flex h-full items-center gap-2 border-x border-stone-200 px-4 text-base font-medium hover:bg-stone-50">
-              {label} <Chevron />
+            <button className="btn h-11 px-4 text-base">
+              {GRANULARITIES.find((g) => g.value === (q.granularity ?? overview?.range.granularity))?.label ?? 'Daily'} <Chevron />
             </button>
           }
         >
-          {(close) => (
-            <>
-              {PERIODS.map((p) => (
-                <button
-                  key={p.value}
-                  className={itemCls(q.period === p.value)}
-                  onClick={() => {
-                    close();
-                    update({ period: p.value, granularity: undefined });
-                  }}
-                >
-                  {p.label}
-                </button>
-              ))}
-              <div className="my-1 border-t border-stone-100" />
-              <form
-                className="space-y-2 p-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!from || !to) return;
+          {(close) =>
+            GRANULARITIES.map((g) => (
+              <button
+                key={g.value}
+                className={itemCls((q.granularity ?? overview?.range.granularity) === g.value)}
+                onClick={() => {
                   close();
-                  update({ period: 'custom', from, to: to < from ? from : to, granularity: undefined });
+                  update({ granularity: g.value });
                 }}
               >
-                <div className="text-xs font-medium text-stone-500">Custom range</div>
-                <input type="date" className="input py-1.5" value={from} onChange={(e) => setFrom(e.target.value)} />
-                <input type="date" className="input py-1.5" value={to} onChange={(e) => setTo(e.target.value)} />
-                <button className="btn-dark w-full py-1.5">Apply</button>
-              </form>
-            </>
-          )}
+                {g.label}
+              </button>
+            ))
+          }
         </Dropdown>
-        <button
-          className="rounded-r-xl px-3 text-xl text-stone-500 hover:bg-stone-50 disabled:opacity-30"
-          onClick={() => shift(1)}
-          disabled={!canForward}
-          aria-label="Next period"
-        >
-          ›
-        </button>
       </div>
 
-      <Dropdown
-        button={
-          <button className="btn h-11 px-4 text-base">
-            {GRANULARITIES.find((g) => g.value === (q.granularity ?? overview?.range.granularity))?.label ?? 'Daily'} <Chevron />
-          </button>
-        }
-      >
-        {(close) =>
-          GRANULARITIES.map((g) => (
-            <button
-              key={g.value}
-              className={itemCls((q.granularity ?? overview?.range.granularity) === g.value)}
-              onClick={() => {
-                close();
-                update({ granularity: g.value });
-              }}
-            >
-              {g.label}
-            </button>
-          ))
-        }
-      </Dropdown>
-
-      <button className="btn h-11 w-11 px-0" onClick={onRefresh} aria-label="Refresh">
+      <button className="btn order-2 ml-auto h-11 w-11 px-0 sm:order-none sm:ml-0" onClick={onRefresh} aria-label="Refresh">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={loading ? 'animate-spin' : ''}>
           <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
           <path d="M21 3v5h-5" />

@@ -32,11 +32,16 @@ export function VisitorModal({ visitorId, onClose }: { visitorId: string | null;
       {!p && <div className="h-60 animate-pulse rounded-xl bg-stone-50" />}
       {p && (
         <div>
-          <div className="flex items-center gap-4">
-            <Avatar id={visitorId!} size={64} />
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="shrink-0 sm:hidden">
+              <Avatar id={visitorId!} size={48} />
+            </span>
+            <span className="hidden shrink-0 sm:block">
+              <Avatar id={visitorId!} size={64} />
+            </span>
             <div className="min-w-0">
               <div className="truncate text-xl font-semibold">{p.visitor?.name || p.visitor?.email || `Visitor ${shortId(visitorId!)}`}</div>
-              {p.visitor?.email && p.visitor.name && <div className="text-sm text-stone-500">{p.visitor.email}</div>}
+              {p.visitor?.email && p.visitor.name && <div className="text-sm text-stone-500 [overflow-wrap:anywhere]">{p.visitor.email}</div>}
               {last && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-stone-500">
                   <span className="flex items-center gap-1">
@@ -79,7 +84,7 @@ export function VisitorModal({ visitorId, onClose }: { visitorId: string | null;
                     <span className="flex items-center gap-1.5 rounded-md bg-stone-100 px-2 py-0.5">
                       <SourceIcon source={s.source} domain={s.referrer_domain} size={14} /> {s.source}
                     </span>
-                    {s.referrer && <span className="max-w-[260px] truncate text-stone-500">{s.referrer}</span>}
+                    {s.referrer && <span className="min-w-0 max-w-full truncate text-stone-500 sm:max-w-[260px]">{s.referrer}</span>}
                     {s.utm_campaign && <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-700">campaign: {s.utm_campaign}</span>}
                     {s.ref && <span className="rounded-md bg-amber-50 px-2 py-0.5 text-amber-700">ref: {s.ref}</span>}
                     <span className="text-stone-400">{fmtDuration(s.duration)}</span>
@@ -90,13 +95,15 @@ export function VisitorModal({ visitorId, onClose }: { visitorId: string | null;
                         <span className="w-14 shrink-0 text-xs leading-5 text-stone-400">
                           {new Intl.DateTimeFormat('en', { timeZone: site.timezone, hour: 'numeric', minute: '2-digit' }).format(e.ts)}
                         </span>
-                        {e.type === 'pageview' && <span className="text-stone-700">📄 {e.path}</span>}
+                        {e.type === 'pageview' && <span className="min-w-0 text-stone-700 [overflow-wrap:anywhere]">📄 {e.path}</span>}
                         {e.type === 'goal' && (
-                          <span className="font-medium text-violet-700">
+                          <span className="min-w-0 font-medium text-violet-700 [overflow-wrap:anywhere]">
                             🎯 {e.name} <span className="font-normal text-stone-400">on {e.path}</span>
                           </span>
                         )}
-                        {e.type === 'outbound' && <span className="text-stone-600">↗ Left to {e.name?.replace(/^https?:\/\//, '')}</span>}
+                        {e.type === 'outbound' && (
+                          <span className="min-w-0 text-stone-600 [overflow-wrap:anywhere]">↗ Left to {e.name?.replace(/^https?:\/\//, '')}</span>
+                        )}
                       </li>
                     ))}
                     {pays.map((x) => (

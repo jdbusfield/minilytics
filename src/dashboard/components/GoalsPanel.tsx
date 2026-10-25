@@ -49,18 +49,21 @@ function Goals({ totalVisitors }: { totalVisitors: number }) {
         <tr className="text-left text-stone-500">
           <th className="px-3 pb-2 font-medium">Goal</th>
           <th className="pb-2 text-right font-medium">Visitors</th>
-          <th className="pb-2 text-right font-medium">Completions</th>
-          <th className="pb-2 text-right font-medium">Conversion</th>
+          <th className="hidden pb-2 text-right font-medium sm:table-cell">Completions</th>
+          <th className="pb-2 pl-2 text-right font-medium sm:pl-0">
+            <span className="sm:hidden">Conv.</span>
+            <span className="hidden sm:inline">Conversion</span>
+          </th>
           <th className="px-3 pb-2 text-right font-medium">Revenue</th>
         </tr>
       </thead>
       <tbody>
         {data.map((g) => (
           <tr key={g.label} className="cursor-pointer border-t border-stone-100 hover:bg-stone-50" onClick={() => addFilter('goal', g.label ?? '')} title="Filter by visitors who completed this goal">
-            <td className="px-3 py-2.5 font-medium">🎯 {g.label}</td>
+            <td className="px-3 py-2.5 font-medium [overflow-wrap:anywhere]">🎯 {g.label}</td>
             <td className="py-2.5 text-right">{fmtNumber(g.visitors)}</td>
-            <td className="py-2.5 text-right">{fmtNumber(g.pageviews ?? 0)}</td>
-            <td className="py-2.5 text-right">{totalVisitors ? fmtPct(g.visitors / totalVisitors, 1) : '—'}</td>
+            <td className="hidden py-2.5 text-right sm:table-cell">{fmtNumber(g.pageviews ?? 0)}</td>
+            <td className="py-2.5 pl-2 text-right sm:pl-0">{totalVisitors ? fmtPct(g.visitors / totalVisitors, 1) : '—'}</td>
             <td className="px-3 py-2.5 text-right">{money(g.revenue)}</td>
           </tr>
         ))}
@@ -209,11 +212,17 @@ function FunnelForm({ onDone, canCancel }: { onDone: (id?: string) => void; canC
 
 function VisitorCell({ id, name, email, country, city, device, os, browser, badge }: Record<string, any>) {
   return (
-    <div className="flex items-center gap-3">
-      <Avatar id={id} size={44} />
+    <div className="flex items-center gap-2.5 sm:gap-3">
+      {/* Phones: smaller avatar, name may wrap, and device/OS/browser live in the visitor modal. */}
+      <span className="shrink-0 sm:hidden">
+        <Avatar id={id} size={32} />
+      </span>
+      <span className="hidden shrink-0 sm:block">
+        <Avatar id={id} size={44} />
+      </span>
       <div className="min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-medium">{name || email || `Visitor ${shortId(id)}`}</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
+          <span className="font-medium [overflow-wrap:anywhere] sm:truncate">{name || email || `Visitor ${shortId(id)}`}</span>
           {badge}
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-stone-500">
@@ -221,13 +230,13 @@ function VisitorCell({ id, name, email, country, city, device, os, browser, badg
             <Flag cc={country} size={15} /> {city ? `${city}, ` : ''}
             {countryName(country)}
           </span>
-          <span className="flex items-center gap-1">
+          <span className="hidden items-center gap-1 sm:flex">
             <DeviceIcon name={device} size={15} /> {device}
           </span>
-          <span className="flex items-center gap-1">
+          <span className="hidden items-center gap-1 sm:flex">
             <OSIcon name={os} size={15} /> {os}
           </span>
-          <span className="flex items-center gap-1">
+          <span className="hidden items-center gap-1 sm:flex">
             <BrowserIcon name={browser} size={15} /> {browser}
           </span>
         </div>
@@ -308,14 +317,15 @@ function Journey({ search }: { search: string }) {
           )}
         </div>
       )}
-      <table className="w-full min-w-[760px] text-[15px]">
+      {/* Phones show Visitor, Source and Spent; tapping a row opens the full journey. */}
+      <table className="w-full text-[15px] sm:min-w-[760px]">
         <thead>
           <tr className="text-left text-sm text-stone-500">
             <th className="px-3 pb-3 font-medium">Visitor</th>
             <th className="pb-3 font-medium">Source</th>
-            <th className="pb-3 font-medium">Spent</th>
-            <th className="pb-3 font-medium">Time to complete</th>
-            <th className="pb-3 font-medium">Completed at</th>
+            <th className="pb-3 pl-2 pr-3 font-medium sm:pl-0 sm:pr-0">Spent</th>
+            <th className="hidden pb-3 font-medium sm:table-cell">Time to complete</th>
+            <th className="hidden pb-3 font-medium sm:table-cell">Completed at</th>
           </tr>
         </thead>
         <tbody>
@@ -365,12 +375,12 @@ function Journey({ search }: { search: string }) {
                     </span>
                   )}
                 </td>
-                <td className="py-4 font-medium">{money(r.amount)}</td>
-                <td className="py-4">
+                <td className="py-4 pl-2 pr-3 font-medium sm:pl-0 sm:pr-0">{money(r.amount)}</td>
+                <td className="hidden py-4 sm:table-cell">
                   {r.first_seen ? fmtAgo(r.ts - r.first_seen) : '—'}
                   {r.visits > 0 && <div className="text-xs text-stone-500">{r.visits} visit{r.visits > 1 ? 's' : ''}</div>}
                 </td>
-                <td className="py-4">{fmtDateTime(r.ts, site.timezone)}</td>
+                <td className="hidden py-4 sm:table-cell">{fmtDateTime(r.ts, site.timezone)}</td>
               </tr>
             ))}
         </tbody>
@@ -388,15 +398,16 @@ function Users({ search }: { search: string }) {
   if (!data.length) return <div className="p-8 text-center text-sm text-stone-500">No visitors in this period.</div>;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-[15px]">
+      {/* Phones show Visitor (with its source underneath) and Last seen; tapping a row opens the visitor. */}
+      <table className="w-full text-[15px] sm:min-w-[760px]">
         <thead>
           <tr className="text-left text-sm text-stone-500">
             <th className="px-3 pb-3 font-medium">Visitor</th>
-            <th className="pb-3 font-medium">Source</th>
-            <th className="pb-3 text-right font-medium">Visits</th>
-            <th className="pb-3 text-right font-medium">Pages</th>
-            <th className="pb-3 text-right font-medium">Time</th>
-            <th className="pb-3 text-right font-medium">Spent</th>
+            <th className="hidden pb-3 font-medium sm:table-cell">Source</th>
+            <th className="hidden pb-3 text-right font-medium sm:table-cell">Visits</th>
+            <th className="hidden pb-3 text-right font-medium sm:table-cell">Pages</th>
+            <th className="hidden pb-3 text-right font-medium sm:table-cell">Time</th>
+            <th className="hidden pb-3 text-right font-medium sm:table-cell">Spent</th>
             <th className="px-3 pb-3 text-right font-medium">Last seen</th>
           </tr>
         </thead>
@@ -418,17 +429,20 @@ function Users({ search }: { search: string }) {
                     browser={r.browser}
                     badge={r.spent > 0 ? <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">Customer</span> : null}
                   />
+                  <div className="ml-[42px] mt-1 flex items-center gap-1.5 text-sm text-stone-500 sm:hidden">
+                    <SourceIcon source={r.source} domain={r.referrer_domain} /> {r.source}
+                  </div>
                 </td>
-                <td className="py-3">
+                <td className="hidden py-3 sm:table-cell">
                   <div className="flex items-center gap-2">
                     <SourceIcon source={r.source} domain={r.referrer_domain} /> {r.source}
                   </div>
                 </td>
-                <td className="py-3 text-right">{r.sessions}</td>
-                <td className="py-3 text-right">{r.pageviews}</td>
-                <td className="py-3 text-right">{fmtDuration(r.duration)}</td>
-                <td className="py-3 text-right">{r.spent ? money(r.spent) : '—'}</td>
-                <td className="px-3 py-3 text-right text-stone-500">{fmtAgo(Date.now() - r.last_seen)} ago</td>
+                <td className="hidden py-3 text-right sm:table-cell">{r.sessions}</td>
+                <td className="hidden py-3 text-right sm:table-cell">{r.pageviews}</td>
+                <td className="hidden py-3 text-right sm:table-cell">{fmtDuration(r.duration)}</td>
+                <td className="hidden py-3 text-right sm:table-cell">{r.spent ? money(r.spent) : '—'}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-right text-stone-500">{fmtAgo(Date.now() - r.last_seen)} ago</td>
               </tr>
             ))}
         </tbody>
