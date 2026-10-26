@@ -18,6 +18,7 @@ interface Payload {
   n?: string;
   p?: Record<string, unknown>;
   d?: number;
+  h?: number;
 }
 
 const clip = (s: unknown, n = 255): string | null =>
@@ -116,8 +117,8 @@ export async function ingest(
   if (t === 'ping') {
     const ms = Math.max(0, Math.min(MAX_PING_MS, Math.round(Number(body.d) || 0)));
     await db
-      .prepare('UPDATE sessions SET duration = duration + ?, last_seen_at = ? WHERE site_id = ? AND id = ?')
-      .bind(ms, now, site.id, sid)
+      .prepare('UPDATE sessions SET duration = duration + ?, last_seen_at = ?, human = MAX(human, ?) WHERE site_id = ? AND id = ?')
+      .bind(ms, now, body.h === 1 ? 1 : 0, site.id, sid)
       .run();
     return;
   }

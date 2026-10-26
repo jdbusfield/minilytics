@@ -110,6 +110,23 @@
     if (d.visibilityState === 'visible' && pings < 30) { pings++; flushTime(false); }
   }, 60000);
 
+  // ---- a real person: the first trusted mouse, touch or key input marks the visit as human.
+  // Crawlers that run JavaScript load pages but never do this. Sent once per session (checked at most
+  // every 5s), so a session that starts later in the same tab is marked too.
+  var humanSid = null, lastInput = 0;
+  function onInput(e) {
+    if (e.isTrusted === false || Date.now() - lastInput < 5000) return;
+    lastInput = Date.now();
+    var sid = readCookie(SID);
+    if (!sid || sid === humanSid) return;
+    humanSid = sid;
+    try { if (sessionStorage.getItem('ml_h') === sid) return; sessionStorage.setItem('ml_h', sid); } catch (err) {}
+    send('ping', { d: 0, h: 1 });
+  }
+  ['pointermove', 'pointerdown', 'touchstart', 'keydown', 'wheel'].forEach(function (n) {
+    d.addEventListener(n, onInput, { capture: true, passive: true });
+  });
+
   // ---- pageviews (including single-page-app navigation)
   var lastPage = null, firstView = true;
   function pageview() {

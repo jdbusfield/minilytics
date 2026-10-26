@@ -141,16 +141,16 @@ export function Toolbar({
         )}
       </Dropdown>
 
-      {/* Phones: the date range and granularity get their own full-width row. */}
+      {/* Phones: the date range, granularity and refresh get their own full-width row. */}
       <div className="order-3 flex w-full gap-2 sm:contents">
-        <div className="flex h-11 flex-1 items-stretch rounded-xl border border-stone-200 bg-white shadow-card sm:flex-initial">
-          <button className="rounded-l-xl px-3 text-xl text-stone-500 hover:bg-stone-50" onClick={() => shift(-1)} aria-label="Previous period">
+        <div className="flex h-11 min-w-0 flex-1 items-stretch rounded-xl border border-stone-200 bg-white shadow-card sm:flex-initial">
+          <button className="rounded-l-xl px-2 text-xl text-stone-500 hover:bg-stone-50 sm:px-3" onClick={() => shift(-1)} aria-label="Previous period">
             ‹
           </button>
           <Dropdown
             className="flex-1"
             button={
-              <button className="flex h-full w-full items-center justify-center gap-2 whitespace-nowrap border-x border-stone-200 px-4 text-base font-medium hover:bg-stone-50">
+              <button className="flex h-full w-full items-center justify-center gap-2 whitespace-nowrap border-x border-stone-200 px-2 text-base font-medium hover:bg-stone-50 sm:px-4">
                 {label} <Chevron />
               </button>
             }
@@ -188,7 +188,7 @@ export function Toolbar({
             )}
           </Dropdown>
           <button
-            className="rounded-r-xl px-3 text-xl text-stone-500 hover:bg-stone-50 disabled:opacity-30"
+            className="rounded-r-xl px-2 text-xl text-stone-500 hover:bg-stone-50 disabled:opacity-30 sm:px-3"
             onClick={() => shift(1)}
             disabled={!canForward}
             aria-label="Next period"
@@ -200,7 +200,7 @@ export function Toolbar({
         <Dropdown
           align="right"
           button={
-            <button className="btn h-11 px-4 text-base">
+            <button className="btn h-11 px-3 text-base sm:px-4">
               {GRANULARITIES.find((g) => g.value === (q.granularity ?? overview?.range.granularity))?.label ?? 'Daily'} <Chevron />
             </button>
           }
@@ -220,13 +220,26 @@ export function Toolbar({
             ))
           }
         </Dropdown>
+
+        <button className="btn h-11 w-11 shrink-0 px-0" onClick={onRefresh} aria-label="Refresh">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={loading ? 'animate-spin' : ''}>
+            <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+        </button>
       </div>
 
-      <button className="btn order-2 ml-auto h-11 w-11 px-0 sm:order-none sm:ml-0" onClick={onRefresh} aria-label="Refresh">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={loading ? 'animate-spin' : ''}>
-          <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
-          <path d="M21 3v5h-5" />
-        </svg>
+      <button
+        className="btn order-2 ml-auto h-11 px-3 text-base sm:order-none sm:ml-0"
+        onClick={() => update({ everyone: !q.everyone })}
+        role="switch"
+        aria-checked={!q.everyone}
+        title="Hide visits with no mouse, touch or key input: crawlers that load pages like a browser. Revenue always counts."
+      >
+        <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${q.everyone ? 'bg-stone-200' : 'bg-ink'}`}>
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${q.everyone ? 'left-0.5' : 'left-[18px]'}`} />
+        </span>
+        Hide bots
       </button>
     </div>
   );

@@ -75,6 +75,8 @@ export interface Query {
   to?: string;
   granularity?: string;
   filters: Filters;
+  /** Include visits that never had real mouse, touch or key input (crawlers). Off by default. */
+  everyone?: boolean;
 }
 
 export function qs(q: Query, extra: Record<string, string | number> = {}) {
@@ -84,6 +86,7 @@ export function qs(q: Query, extra: Record<string, string | number> = {}) {
   if (q.to) p.set('to', q.to);
   if (q.granularity) p.set('granularity', q.granularity);
   if (Object.keys(q.filters).length) p.set('filters', JSON.stringify(q.filters));
+  if (!q.everyone) p.set('humans', '1');
   for (const [k, v] of Object.entries(extra)) p.set(k, String(v));
   return p.toString();
 }

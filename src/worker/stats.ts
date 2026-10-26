@@ -72,18 +72,34 @@ interface Ctx {
   site: Site;
   range: Range;
   filters: Filters;
+  /** Count only visits with real mouse, touch or key input. Payments ignore this: the money is real either way. */
+  humans: boolean;
   offset: number;
 }
+
+/** filterSql plus the humans-only condition: for anything that counts visits. */
+function visitSql(ctx: Ctx) {
+  const f = filterSql(ctx.filters);
+  return ctx.humans ? { sql: f.sql + ' AND s.human = 1', params: f.params } : f;
+}
+const visitsNeedSessions = (ctx: Ctx) => ctx.humans || hasFilters(ctx.filters);
 
 export function makeCtx(c: Context<AppEnv>): Ctx {
   const site = c.get('site');
   const q = c.req.query();
   const range = resolveRange(q, site.timezone, site.created_at);
-  return { db: c.env.DB, site, range, filters: parseFilters(q.filters), offset: tzOffset(site.timezone, range.to) };
+  return {
+    db: c.env.DB,
+    site,
+    range,
+    filters: parseFilters(q.filters),
+    humans: q.humans === '1',
+    offset: tzOffset(site.timezone, range.to),
+  };
 }
 
 function sessionsWhere(ctx: Ctx, from = ctx.range.from, to = ctx.range.to) {
-  const f = filterSql(ctx.filters);
+  const f = visitSql(ctx);
   return {
     sql: `s.site_id = ? AND s.started_at >= ? AND s.started_at < ?${f.sql}`,
     params: [ctx.site.id, from, to, ...f.params],
@@ -161,7 +177,9 @@ export async function overview(ctx: Ctx) {
     db.prepare(REVENUE_SQL(curPay.sql)).bind(...curPay.params),
     db.prepare(REVENUE_SQL(prevPay.sql)).bind(...prevPay.params),
     db
-      .prepare('SELECT COUNT(DISTINCT visitor_id) AS n FROM sessions WHERE site_id = ? AND started_at > ? AND last_seen_at > ?')
+      .prepare(
+        `SELECT COUNT(DISTINCT visitor_id) AS n FROM sessions WHERE site_id = ? AND started_at > ? AND last_seen_at > ?${ctx.humans ? ' AND human = 1' : ''}`,
+      )
       .bind(site.id, now - 6 * 3_600_000, now - 5 * 60_000),
     db
       .prepare(
@@ -267,8 +285,8 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
   }
 
   if (dim === 'page') {
-    const f = filterSql(ctx.filters);
-    const join = hasFilters(ctx.filters) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
+    const f = visitSql(ctx);
+    const join = visitsNeedSessions(ctx) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
     const params = [ctx.site.id, ctx.range.from, ctx.range.to, ...f.params];
     const base = `FROM events e ${join} WHERE e.site_id = ? AND e.type = 'pageview' AND e.ts >= ? AND e.ts < ?${f.sql}`;
     const [v, r] = await db.batch([
@@ -293,8 +311,8 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
 
   if (dim === 'exit_link' || dim === 'goal') {
     const type = dim === 'goal' ? 'goal' : 'outbound';
-    const f = filterSql(ctx.filters);
-    const join = hasFilters(ctx.filters) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
+    const f = visitSql(ctx);
+    const join = visitsNeedSessions(ctx) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
     const params = [ctx.site.id, type, ctx.range.from, ctx.range.to, ...f.params];
     const base = `FROM events e ${join} WHERE e.site_id = ? AND e.type = ? AND e.ts >= ? AND e.ts < ?${f.sql}`;
     const [v, r] = await db.batch([
@@ -405,8 +423,8 @@ export interface FunnelStep {
 /** Visitors who completed each step, in order, within the period. */
 export async function funnel(ctx: Ctx, steps: FunnelStep[]) {
   if (!steps.length) return [];
-  const f = filterSql(ctx.filters);
-  const join = hasFilters(ctx.filters) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
+  const f = visitSql(ctx);
+  const join = visitsNeedSessions(ctx) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
   const conds: string[] = [];
   const params: unknown[] = [];
   for (const st of steps) {

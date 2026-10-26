@@ -115,7 +115,7 @@ app.get('/api/sites', async (c) => {
     c.env.DB.prepare(
       `SELECT site_id, COUNT(DISTINCT visitor_id) AS visitors,
               COUNT(DISTINCT CASE WHEN last_seen_at > ? THEN visitor_id END) AS online
-       FROM sessions WHERE started_at > ? GROUP BY site_id`,
+       FROM sessions WHERE started_at > ? AND human = 1 GROUP BY site_id`,
     ).bind(now - 5 * 60_000, now - 86_400_000),
   ]);
   const by = new Map((stats.results as any[]).map((r) => [r.site_id, r]));
