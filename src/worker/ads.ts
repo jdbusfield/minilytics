@@ -96,6 +96,20 @@ export async function recomputeAdRates(db: D1Database, site: Site): Promise<numb
       new Map((views.results as { path: string; n: number }[]).map((r) => [r.path, r.n])),
     );
   }
+  if (!rates) {
+    // No fully tracked day reported yet (e.g. the morning after setup): price by the ad network's own
+    // pageviews until there is one. Usually a bit low, since Minilytics counts fewer pageviews.
+    const [days, pages] = await db.batch([
+      db.prepare(`SELECT SUM(earnings) AS e FROM ad_days WHERE site_id = ? AND day IN (SELECT day FROM ad_pages WHERE site_id = ?)`).bind(site.id, site.id),
+      db.prepare(`SELECT path, SUM(earnings) AS e, SUM(pageviews) AS n FROM ad_pages WHERE site_id = ? GROUP BY path`).bind(site.id),
+    ]);
+    const network = pages.results as { path: string; e: number; n: number }[];
+    rates = computeAdRates(
+      (days.results[0] as { e: number | null } | undefined)?.e ?? 0,
+      new Map(network.map((r) => [r.path, r.e])),
+      new Map(network.map((r) => [r.path, r.n])),
+    );
+  }
   const rows = [...(rates ?? [])];
   for (let i = 0; i < rows.length; i += ROWS_PER_INSERT) {
     const chunk = rows.slice(i, i + ROWS_PER_INSERT);
