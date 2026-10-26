@@ -245,6 +245,24 @@ function VisitorCell({ id, name, email, country, city, device, os, browser, badg
   );
 }
 
+/** A payment with no visitor: no avatar or device details to show, just who paid if the provider said. */
+function UnlinkedPaymentCell({ name, email, renewal, badge }: Record<string, any>) {
+  return (
+    <div className="flex items-center gap-2.5 sm:gap-3">
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-100 text-base text-stone-400 ring-2 ring-white sm:h-11 sm:w-11 sm:text-xl">
+        $
+      </span>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 sm:flex-nowrap">
+          <span className="font-medium [overflow-wrap:anywhere] sm:truncate">{name || email || (renewal ? 'Earlier subscriber' : 'Unknown buyer')}</span>
+          {badge}
+        </div>
+        <div className="mt-0.5 text-sm text-stone-500">{renewal ? 'Renewal from before tracking started' : 'Not linked to a visit'}</div>
+      </div>
+    </div>
+  );
+}
+
 function matches(r: Record<string, any>, search: string) {
   if (!search) return true;
   const s = search.toLowerCase();
@@ -259,6 +277,12 @@ function ShowAll({ total, shown, onClick }: { total: number; shown: number; onCl
     <button className="mx-auto mt-3 block text-xs font-semibold uppercase tracking-wider text-stone-500 hover:text-ink" onClick={onClick}>
       Show all {total}
     </button>
+  );
+}
+
+function CustomerBadge({ renewal }: { renewal: number }) {
+  return (
+    <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">{renewal ? 'Returning' : 'Customer'}</span>
   );
 }
 
@@ -279,7 +303,8 @@ function Journey({ search }: { search: string }) {
   if (!data) return <div className="h-40 animate-pulse" />;
   if (!data.length)
     return <div className="p-8 text-center text-sm text-stone-500">No payments in this period. Connect Dodo Payments in site settings to see who paid and where they came from.</div>;
-  const unmatched = data.filter((r) => !r.visitor_id).length;
+  // Unlinked renewals only link once their first payment does, so they don't count as waiting to be matched.
+  const unmatched = data.filter((r) => !r.visitor_id && !r.renewal).length;
   return (
     <div className="overflow-x-auto">
       {unmatched > 0 && (
@@ -339,21 +364,21 @@ function Journey({ search }: { search: string }) {
                 onClick={() => r.visitor_id && openVisitor(r.visitor_id)}
               >
                 <td className="px-3 py-4">
-                  <VisitorCell
-                    id={r.visitor_id ?? r.id}
-                    name={r.name ?? r.pay_name}
-                    email={r.email ?? r.pay_email}
-                    country={r.country}
-                    city={null}
-                    device={r.device}
-                    os={r.os}
-                    browser={r.browser}
-                    badge={
-                      <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">
-                        {r.renewal ? 'Returning' : 'Customer'}
-                      </span>
-                    }
-                  />
+                  {r.visitor_id ? (
+                    <VisitorCell
+                      id={r.visitor_id}
+                      name={r.name ?? r.pay_name}
+                      email={r.email ?? r.pay_email}
+                      country={r.country}
+                      city={null}
+                      device={r.device}
+                      os={r.os}
+                      browser={r.browser}
+                      badge={<CustomerBadge renewal={r.renewal} />}
+                    />
+                  ) : (
+                    <UnlinkedPaymentCell name={r.pay_name} email={r.pay_email} renewal={r.renewal} badge={<CustomerBadge renewal={r.renewal} />} />
+                  )}
                 </td>
                 <td className="py-4">
                   {r.session_id ? (
@@ -369,6 +394,10 @@ function Journey({ search }: { search: string }) {
                         )}
                       </div>
                     </div>
+                  ) : r.renewal ? (
+                    <span className="text-stone-400" title="The subscription's first payment isn't linked to a visit, usually because it started before tracking was installed">
+                      Before tracking
+                    </span>
                   ) : (
                     <span className="text-stone-400" title="No visitor id in the payment metadata, and no return-page, email or timing match">
                       Not attributed

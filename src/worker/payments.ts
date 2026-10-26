@@ -80,6 +80,7 @@ async function attribute(db: D1Database, site: Site, p: PaymentInput) {
     if (v) [visitorId, matchedBy] = [v.id, 'email'];
   }
   let reason: string | null = null;
+  if (!visitorId && renewal) reason = "Renewal whose first payment isn't linked to a visit (usually it started before tracking)";
   if (!visitorId && p.kind === 'payment' && !renewal) {
     const t = await matchByTiming(db, site, p);
     if (t.visitorId) [visitorId, matchedBy] = [t.visitorId, 'timing'];
@@ -189,7 +190,18 @@ export async function rematchPayments(db: D1Database, site: Site) {
   const rows = await db
     .prepare("SELECT * FROM payments WHERE site_id = ? AND kind = 'payment' AND visitor_id IS NULL ORDER BY ts LIMIT 500")
     .bind(site.id)
-    .all<{ id: string; ts: number; amount: number; currency: string; customer_id: string | null; email: string | null; name: string | null; provider: string; subscription_id: string | null }>();
+    .all<{
+      id: string;
+      ts: number;
+      amount: number;
+      currency: string;
+      customer_id: string | null;
+      email: string | null;
+      name: string | null;
+      provider: string;
+      subscription_id: string | null;
+      renewal: number;
+    }>();
   let matched = 0;
   const details: { id: string; name: string | null; matched: boolean; reason: string | null }[] = [];
   for (const r of rows.results) {
@@ -204,6 +216,7 @@ export async function rematchPayments(db: D1Database, site: Site) {
       email: r.email,
       name: r.name,
       subscriptionId: r.subscription_id,
+      renewal: !!r.renewal,
     });
     details.push({ id: r.id, name: r.name, matched: !!a.visitorId, reason: a.reason });
     if (!a.visitorId) continue;
