@@ -314,7 +314,7 @@ export async function handleDodoWebhook(c: Context<AppEnv>) {
   return c.json({ ok: true });
 }
 
-async function siteFromApiKey(c: Context<AppEnv>): Promise<Site | null> {
+export async function siteFromApiKey(c: Context<AppEnv>): Promise<Site | null> {
   const key = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
   if (!key) return null;
   return c.env.DB.prepare('SELECT * FROM sites WHERE api_key = ?').bind(key).first<Site>();

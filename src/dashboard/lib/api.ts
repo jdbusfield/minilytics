@@ -41,7 +41,12 @@ export interface Kpis {
   pageviews: number;
   bounceRate: number;
   avgDuration: number;
+  /** Payments plus ad revenue. */
   revenue: number;
+  paymentRevenue: number;
+  adRevenue: number;
+  /** The part of adRevenue the ad network hasn't reported yet. */
+  adEstimated: number;
   payments: number;
   customers: number;
   conversionRate: number;
@@ -58,7 +63,8 @@ export interface Overview {
   online: number;
   /** Visitors active in the last 30 minutes (what GA's realtime report shows). */
   online30: number;
-  series: { bucket: string; visitors: number; pageviews: number; revenue: number; payments: number }[];
+  /** `revenue` is payments only here; ads are `adActual` (reported) and `adEst` (estimated). */
+  series: { bucket: string; visitors: number; pageviews: number; revenue: number; payments: number; adActual: number; adEst: number }[];
 }
 
 export interface BreakdownRow {

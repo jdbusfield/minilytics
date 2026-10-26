@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { classify } from '../src/shared/sources';
+import { computeAdRates } from '../src/worker/ads';
 import { belongsTo, normalizePath } from '../src/worker/collect';
 import { verifyStandardWebhook } from '../src/worker/lib/crypto';
 import { bucketLabels, resolveRange, startOfDay, tzOffset } from '../src/worker/lib/time';
@@ -98,5 +99,22 @@ describe('Standard Webhooks (Dodo)', () => {
   it('rejects tampering and stale timestamps', async () => {
     expect(await verifyStandardWebhook(secret, { id: 'msg_1', timestamp: ts, signature: `v1,${sig}` }, body + ' ')).toBe(false);
     expect(await verifyStandardWebhook(secret, { id: 'msg_1', timestamp: String(Number(ts) - 3600), signature: `v1,${sig}` }, body)).toBe(false);
+  });
+});
+
+describe('ad rates', () => {
+  const views = new Map([['/a', 1000], ['/b', 1000], ['/rare', 10]]);
+  it('prices the whole site at earnings per human pageview', () => {
+    expect(computeAdRates(2010, new Map(), views)?.get('*')).toBeCloseTo(1);
+  });
+  it('gives busy pages their own rate and pulls quiet pages toward the site rate', () => {
+    // The page report adds up to 10% more than the daily total; it's scaled down to match.
+    const rates = computeAdRates(2010, new Map([['/a', 1650], ['/b', 550], ['/rare', 11]]), views)!;
+    expect(rates.get('/a')!).toBeGreaterThan(1.3);
+    expect(rates.get('/b')!).toBeLessThan(0.6);
+    expect(rates.get('/rare')!).toBeCloseTo(1, 1);
+  });
+  it('earns nothing without pageviews to price', () => {
+    expect(computeAdRates(500, new Map([['/a', 500]]), new Map())).toBeNull();
   });
 });

@@ -150,6 +150,19 @@ curl -X POST https://YOUR-HOST/api/v1/payments -H "Authorization: Bearer ml_..."
   -d '{"transaction_id":"txn_1","amount":29.99,"currency":"USD","visitor_id":"<ml_vid cookie>","email":"jane@acme.com"}'
 ```
 
+### Ad revenue
+
+If the site runs ads, send each day's ad network earnings once the network reports them (usually the next morning).
+Per-page numbers are optional but make the estimates much better:
+
+```bash
+curl -X POST https://YOUR-HOST/api/v1/ad-revenue -H "Authorization: Bearer ml_..." -H "Content-Type: application/json"   -d '{"days":[{"date":"2026-10-25","earnings":41.27,"pages":[{"path":"/blog/some-post","earnings":3.10,"pageviews":220}]}]}'
+```
+
+Revenue then includes ads. A reported day is spread over that day's human pageviews by what each page earns, so it
+adds up to exactly what the network paid and shows up on sources, pages and visitors. Days the network hasn't reported
+yet (today, usually yesterday too) are estimated from the last 28 reported days and shown as estimated on the chart.
+
 ## Accuracy notes
 
 No analytics tool is 100% accurate. These are the main gaps and how this project handles them:

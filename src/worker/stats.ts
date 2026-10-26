@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import type { AppEnv, Site } from './env';
 import { bucketLabels, bucketSql, resolveRange, tzOffset, type Range } from './lib/time';
+import { AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
 
 /** Filters that live on the session row (clicking a row in the dashboard adds one of these). */
@@ -143,19 +144,51 @@ interface RevRow {
   customers: number;
   payments: number;
 }
+interface AdRow {
+  ad_actual: number | null;
+  ad_est: number | null;
+}
 
-function kpis(k: KpiRow, r: RevRow) {
+/**
+ * Ad revenue credited to the human pageviews of matching visits (see ads.ts), split into days the ad
+ * network has reported (`ad_actual`) and days it hasn't yet (`ad_est`). Always humans only: bots earn
+ * nothing, and this doesn't move with the Hide bots switch.
+ */
+function adSql(ctx: Ctx, bucket: string, from: number, to: number) {
+  const f = filterSql(ctx.filters);
+  return {
+    sql: `SELECT ${bucket} AS b,
+            SUM(CASE WHEN a.est > 0 THEN COALESCE(r.rate, w.rate) * a.earnings / a.est ELSE 0 END) AS ad_actual,
+            SUM(CASE WHEN a.day IS NULL THEN COALESCE(r.rate, w.rate) ELSE 0 END) AS ad_est
+          FROM events e JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id
+          ${AD_RATE_JOINS}
+          LEFT JOIN ad_days a ON a.site_id = e.site_id AND a.day = ${bucketSql('e.ts', 'day', ctx.offset)}
+          WHERE e.site_id = ? AND e.type = 'pageview' AND e.ts >= ? AND e.ts < ? AND s.human = 1${f.sql}
+          GROUP BY b`,
+    params: [ctx.site.id, from, to, ...f.params],
+  };
+}
+
+function kpis(k: KpiRow, r: RevRow, a: AdRow | undefined) {
+  const adActual = Math.round(a?.ad_actual ?? 0);
+  const adEst = Math.round(a?.ad_est ?? 0);
+  const revenue = r.revenue + adActual + adEst;
   return {
     visitors: k.visitors,
     sessions: k.sessions,
     pageviews: k.pageviews,
     bounceRate: k.sessions ? k.bounces / k.sessions : 0,
     avgDuration: Math.round(k.avg_duration),
-    revenue: r.revenue,
+    /** Payments plus ad revenue. */
+    revenue,
+    paymentRevenue: r.revenue,
+    adRevenue: adActual + adEst,
+    /** The part of adRevenue the ad network hasn't reported yet. */
+    adEstimated: adEst,
     payments: r.payments,
     customers: r.customers,
     conversionRate: k.visitors ? r.customers / k.visitors : 0,
-    revenuePerVisitor: k.visitors ? r.revenue / k.visitors : 0,
+    revenuePerVisitor: k.visitors ? revenue / k.visitors : 0,
   };
 }
 
@@ -170,8 +203,10 @@ export async function overview(ctx: Ctx) {
   const sb = bucketSql('s.started_at', range.granularity, ctx.offset);
   const pb = bucketSql('p.ts', range.granularity, ctx.offset);
   const now = Date.now();
+  const adCur = adSql(ctx, bucketSql('e.ts', range.granularity, ctx.offset), range.from, range.to);
+  const adPrev = adSql(ctx, "''", prevFrom, range.from);
 
-  const [k1, k0, r1, r0, online, ts, tr] = await db.batch([
+  const [k1, k0, r1, r0, online, ts, tr, a1, a0] = await db.batch([
     db.prepare(KPI_SQL(cur.sql)).bind(...cur.params),
     db.prepare(KPI_SQL(prev.sql)).bind(...prev.params),
     db.prepare(REVENUE_SQL(curPay.sql)).bind(...curPay.params),
@@ -194,10 +229,17 @@ export async function overview(ctx: Ctx) {
          FROM ${curPay.sql} GROUP BY b`,
       )
       .bind(...curPay.params),
+    db.prepare(adCur.sql).bind(...adCur.params),
+    db.prepare(adPrev.sql).bind(...adPrev.params),
   ]);
 
   const visitorsBy = new Map((ts.results as any[]).map((r) => [r.b, r]));
   const revenueBy = new Map((tr.results as any[]).map((r) => [r.b, r]));
+  const adBy = new Map((a1.results as (AdRow & { b: string })[]).map((r) => [r.b, r]));
+  const adTotal = (a1.results as AdRow[]).reduce<AdRow>(
+    (t, r) => ({ ad_actual: (t.ad_actual ?? 0) + (r.ad_actual ?? 0), ad_est: (t.ad_est ?? 0) + (r.ad_est ?? 0) }),
+    { ad_actual: 0, ad_est: 0 },
+  );
   const labels = bucketLabels(range, ctx.offset);
   const series = labels.map((b) => ({
     bucket: b,
@@ -205,14 +247,16 @@ export async function overview(ctx: Ctx) {
     pageviews: visitorsBy.get(b)?.pageviews ?? 0,
     revenue: revenueBy.get(b)?.revenue ?? 0,
     payments: revenueBy.get(b)?.payments ?? 0,
+    adActual: Math.round(adBy.get(b)?.ad_actual ?? 0),
+    adEst: Math.round(adBy.get(b)?.ad_est ?? 0),
   }));
 
   return {
     range,
     currency: site.currency,
     decimals: currencyDecimals(site.currency),
-    current: kpis(k1.results[0] as KpiRow, r1.results[0] as RevRow),
-    previous: kpis(k0.results[0] as KpiRow, r0.results[0] as RevRow),
+    current: kpis(k1.results[0] as KpiRow, r1.results[0] as RevRow, adTotal),
+    previous: kpis(k0.results[0] as KpiRow, r0.results[0] as RevRow, a0.results[0] as AdRow | undefined),
     online: (online.results[0] as { n5: number }).n5,
     online30: (online.results[0] as { n30: number }).n30,
     series,
@@ -268,7 +312,8 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
         };
     const extraCol =
       dim === 'source' ? 'MAX(s.referrer_domain)' : dim === 'region' || dim === 'city' ? 'MAX(s.country)' : 'NULL';
-    const [v, r] = await db.batch([
+    const ad = adSql(ctx, col, ctx.range.from, ctx.range.to);
+    const [v, r, a] = await db.batch([
       db
         .prepare(
           `SELECT ${col} AS label, COUNT(DISTINCT s.visitor_id) AS visitors, SUM(s.pageviews) AS pageviews, ${extraCol} AS extra
@@ -282,8 +327,9 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
            FROM ${payJoin.sql} GROUP BY label`,
         )
         .bind(...payJoin.params),
+      db.prepare(ad.sql).bind(...ad.params),
     ]);
-    return merge(v.results as any[], r.results as any[]);
+    return merge(v.results as any[], r.results as any[], a.results as any[]);
   }
 
   if (dim === 'page') {
@@ -291,7 +337,8 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
     const join = visitsNeedSessions(ctx) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
     const params = [ctx.site.id, ctx.range.from, ctx.range.to, ...f.params];
     const base = `FROM events e ${join} WHERE e.site_id = ? AND e.type = 'pageview' AND e.ts >= ? AND e.ts < ?${f.sql}`;
-    const [v, r] = await db.batch([
+    const ad = adSql(ctx, 'e.path', ctx.range.from, ctx.range.to);
+    const [v, r, a] = await db.batch([
       db
         .prepare(
           `SELECT e.path AS label, COUNT(DISTINCT e.visitor_id) AS visitors, COUNT(*) AS pageviews ${base}
@@ -307,8 +354,10 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
            GROUP BY pv.label`,
         )
         .bind(...params, ctx.site.id, ctx.range.from, ctx.range.to),
+      // Plus the ads shown on the page.
+      db.prepare(ad.sql).bind(...ad.params),
     ]);
-    return merge(v.results as any[], r.results as any[]);
+    return merge(v.results as any[], r.results as any[], a.results as any[]);
   }
 
   if (dim === 'exit_link' || dim === 'goal') {
@@ -339,13 +388,15 @@ export async function breakdown(ctx: Ctx, dim: string, limit = 100): Promise<Bre
   throw new Error(`unknown dimension ${dim}`);
 }
 
-function merge(visits: any[], revenue: any[]): BreakdownRow[] {
+/** Visits + payments (+ ad revenue, `{ b: label, ad_actual, ad_est }`) per label. */
+function merge(visits: any[], revenue: any[], ads: any[] = []): BreakdownRow[] {
   const rev = new Map(revenue.map((r) => [r.label, r]));
+  const ad = new Map(ads.map((r) => [r.b, Math.round((r.ad_actual ?? 0) + (r.ad_est ?? 0))]));
   const rows: BreakdownRow[] = visits.map((v) => ({
     label: v.label,
     visitors: v.visitors,
     pageviews: v.pageviews ?? undefined,
-    revenue: rev.get(v.label)?.revenue ?? 0,
+    revenue: (rev.get(v.label)?.revenue ?? 0) + (ad.get(v.label) ?? 0),
     customers: rev.get(v.label)?.customers ?? 0,
     extra: v.extra ?? null,
   }));

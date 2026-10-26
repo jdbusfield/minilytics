@@ -53,6 +53,23 @@ export function OverviewCard({ data }: { data: Overview | null }) {
               {k.label}
             </div>
             <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight tracking-tight">{k.value}</div>
+            {k.key === 'revenue' && c!.adRevenue > 0 && (
+              // Same colors as the bars: subscriptions, reported ads, estimated ads.
+              <div className="flex flex-wrap gap-x-2 text-xs text-stone-500">
+                {[
+                  { cls: 'bg-revenue', v: c!.paymentRevenue, title: 'Subscriptions' },
+                  { cls: 'bg-ads', v: c!.adRevenue - c!.adEstimated, title: 'Ads (reported)' },
+                  { cls: 'bg-adsEst', v: c!.adEstimated, title: 'Ads (estimated)' },
+                ]
+                  .filter((x) => x.v > 0)
+                  .map((x) => (
+                    <span key={x.cls} className="inline-flex items-center gap-1" title={x.title}>
+                      <span className={`h-2 w-2 rounded-sm ${x.cls}`} />
+                      {money(x.v, true)}
+                    </span>
+                  ))}
+              </div>
+            )}
             <Change cur={c![k.key as keyof Kpis]} prev={p![k.key as keyof Kpis]} invert={k.invert} />
           </button>
         ))}
@@ -121,15 +138,32 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                       <div className="mb-2 font-medium">{bucketLabel(d.bucket, g, true)}</div>
                       <Row color="bg-visitors" label="Visitors" value={fmtNumber(d.visitors)} />
                       <Row color="bg-stone-300" label="Pageviews" value={fmtNumber(d.pageviews)} />
-                      <Row color="bg-revenue" label="Revenue" value={money(d.revenue)} />
+                      <Row color="bg-revenue" label="Subscriptions" value={money(d.revenue)} />
+                      {d.adActual > 0 && <Row color="bg-ads" label="Ads" value={money(d.adActual)} />}
+                      {d.adEst > 0 && <Row color="bg-adsEst" label="Ads (estimated)" value={money(d.adEst)} />}
                       {d.payments > 0 && <Row color="bg-revenueSoft" label="Payments" value={String(d.payments)} />}
                     </div>
                   );
                 }}
               />
-              {!hidden.revenue && (
-                <Bar yAxisId="r" dataKey="revenue" fill="#e07b5f" radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
-              )}
+              {/* One stack per bucket: subscriptions, then ads the network has reported, then ads still estimated. */}
+              {!hidden.revenue &&
+                [
+                  { key: 'revenue', fill: '#e07b5f' },
+                  { key: 'adActual', fill: '#5fb88a' },
+                  { key: 'adEst', fill: '#f2c94c' },
+                ].map((b) => (
+                  <Bar
+                    key={b.key}
+                    yAxisId="r"
+                    stackId="revenue"
+                    dataKey={b.key}
+                    fill={b.fill}
+                    radius={[3, 3, 0, 0]}
+                    maxBarSize={36}
+                    isAnimationActive={false}
+                  />
+                ))}
               {!hidden.visitors && (
                 <Area
                   yAxisId="v"
