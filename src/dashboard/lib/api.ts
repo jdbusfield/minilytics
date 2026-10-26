@@ -54,7 +54,10 @@ export interface Overview {
   decimals: number;
   current: Kpis;
   previous: Kpis;
+  /** Visitors active in the last 5 minutes. */
   online: number;
+  /** Visitors active in the last 30 minutes (what GA's realtime report shows). */
+  online30: number;
   series: { bucket: string; visitors: number; pageviews: number; revenue: number; payments: number }[];
 }
 

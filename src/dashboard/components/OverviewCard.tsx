@@ -40,11 +40,11 @@ export function OverviewCard({ data }: { data: Overview | null }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="grid grid-cols-2 border-b border-stone-100 sm:grid-cols-4 lg:grid-cols-7">
+      <div className="grid grid-cols-2 border-b border-stone-100 sm:grid-cols-4 xl:grid-cols-8">
         {kpis.map((k) => (
           <button
             key={k.key}
-            className={`border-stone-100 px-4 py-3 text-left sm:px-5 sm:py-4 lg:border-r ${k.metric ? 'hover:bg-stone-50' : 'cursor-default'}`}
+            className={`border-stone-100 px-4 py-3 text-left sm:px-5 sm:py-4 xl:border-r ${k.metric ? 'hover:bg-stone-50' : 'cursor-default'}`}
             onClick={() => k.metric && setHidden((h) => ({ ...h, [k.metric!]: !h[k.metric!] }))}
             title={k.metric ? 'Show/hide on chart' : undefined}
           >
@@ -56,14 +56,18 @@ export function OverviewCard({ data }: { data: Overview | null }) {
             <Change cur={c![k.key as keyof Kpis]} prev={p![k.key as keyof Kpis]} invert={k.invert} />
           </button>
         ))}
-        {data && (
-          <div className="px-4 py-3 sm:px-5 sm:py-4">
-            <div className="flex items-center gap-1.5 text-sm text-stone-500">
-              Online <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+        {data &&
+          [
+            { label: 'Last 30 min', value: data.online30, cls: 'xl:border-r' },
+            { label: 'Last 5 min', value: data.online, cls: '' },
+          ].map((o) => (
+            <div key={o.label} className={`border-stone-100 px-4 py-3 sm:px-5 sm:py-4 ${o.cls}`} title={`Visitors active in the ${o.label.toLowerCase()}`}>
+              <div className="flex items-center gap-1.5 text-sm text-stone-500">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" /> {o.label}
+              </div>
+              <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight">{fmtNumber(o.value)}</div>
             </div>
-            <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight">{data.online}</div>
-          </div>
-        )}
+          ))}
         {!data && <div className="col-span-full h-[98px] animate-pulse bg-stone-50" />}
       </div>
 

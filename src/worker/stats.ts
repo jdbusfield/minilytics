@@ -178,9 +178,10 @@ export async function overview(ctx: Ctx) {
     db.prepare(REVENUE_SQL(prevPay.sql)).bind(...prevPay.params),
     db
       .prepare(
-        `SELECT COUNT(DISTINCT visitor_id) AS n FROM sessions WHERE site_id = ? AND started_at > ? AND last_seen_at > ?${ctx.humans ? ' AND human = 1' : ''}`,
+        `SELECT COUNT(DISTINCT CASE WHEN last_seen_at > ? THEN visitor_id END) AS n5, COUNT(DISTINCT visitor_id) AS n30
+         FROM sessions WHERE site_id = ? AND started_at > ? AND last_seen_at > ?${ctx.humans ? ' AND human = 1' : ''}`,
       )
-      .bind(site.id, now - 6 * 3_600_000, now - 5 * 60_000),
+      .bind(now - 5 * 60_000, site.id, now - 6 * 3_600_000, now - 30 * 60_000),
     db
       .prepare(
         `SELECT ${sb} AS b, COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(*) AS sessions, SUM(s.pageviews) AS pageviews
@@ -212,7 +213,8 @@ export async function overview(ctx: Ctx) {
     decimals: currencyDecimals(site.currency),
     current: kpis(k1.results[0] as KpiRow, r1.results[0] as RevRow),
     previous: kpis(k0.results[0] as KpiRow, r0.results[0] as RevRow),
-    online: (online.results[0] as { n: number }).n,
+    online: (online.results[0] as { n5: number }).n5,
+    online30: (online.results[0] as { n30: number }).n30,
     series,
   };
 }

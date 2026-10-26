@@ -90,6 +90,7 @@ assert(o.current.customers === 1, 'one customer (renewal not double counted)');
 assert(Math.abs(o.current.bounceRate - 0.5) < 1e-9, 'bounce rate 50%');
 assert(o.current.avgDuration === 21000, `avg session time 21s (got ${o.current.avgDuration})`);
 assert(o.online === 2, 'two online');
+assert(o.online30 === 2, 'two online in the last 30 minutes');
 
 const src = (await call(`/api/sites/${site.id}/breakdown?period=today&dim=source`)).body;
 const x = src.find((s) => s.label === 'X');
