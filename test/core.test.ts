@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { classify } from '../src/shared/sources';
-import { computeAdRates } from '../src/worker/ads';
+import { adSourceName, computeAdRates } from '../src/worker/ads';
 import { belongsTo, normalizePath } from '../src/worker/collect';
 import { verifyStandardWebhook } from '../src/worker/lib/crypto';
 import { bucketLabels, resolveRange, startOfDay, tzOffset } from '../src/worker/lib/time';
@@ -103,18 +103,42 @@ describe('Standard Webhooks (Dodo)', () => {
 });
 
 describe('ad rates', () => {
-  const views = new Map([['/a', 1000], ['/b', 1000], ['/rare', 10]]);
+  const v = (path: string, n: number, source = 'Google') => ({ path, source, n });
+  const views = [v('/a', 1000), v('/b', 1000), v('/rare', 10)];
   it('prices the whole site at earnings per human pageview', () => {
-    expect(computeAdRates(2010, new Map(), views)?.get('*')).toBeCloseTo(1);
+    expect(computeAdRates(2010, views)?.get('*')).toBeCloseTo(1);
   });
   it('gives busy pages their own rate and pulls quiet pages toward the site rate', () => {
     // The page report adds up to 10% more than the daily total; it's scaled down to match.
-    const rates = computeAdRates(2010, new Map([['/a', 1650], ['/b', 550], ['/rare', 11]]), views)!;
+    const rates = computeAdRates(2010, views, { earnings: new Map([['/a', 1650], ['/b', 550], ['/rare', 11]]), views })!;
     expect(rates.get('/a')!).toBeGreaterThan(1.3);
     expect(rates.get('/b')!).toBeLessThan(0.6);
     expect(rates.get('/rare')!).toBeCloseTo(1, 1);
   });
+  it('prices each traffic source, pooling the ones the network does not name', () => {
+    const mixed = [v('/a', 1000, 'Reddit'), v('/a', 1000, 'Direct/None'), v('/a', 50, 'DuckDuckGo')];
+    const rates = computeAdRates(2050, mixed, null, { earnings: new Map([['Reddit', 500], ['Direct/None', 1500], ['', 50]]), views: mixed })!;
+    const worth = (s: string) => rates.get('*')! * rates.get('source:' + s)!;
+    expect(worth('Reddit')).toBeCloseTo(0.55, 1);
+    expect(worth('Direct/None')).toBeCloseTo(1.45, 1);
+    // The day still adds up to what was paid.
+    expect(1000 * worth('Reddit') + 1000 * worth('Direct/None') + 50 * worth('')).toBeCloseTo(2050);
+  });
+  it('does not mark a page down again for the visitors its source already explains', () => {
+    const mixed = [v('/blog', 1000, 'Reddit'), v('/home', 1000, 'Direct/None')];
+    const rates = computeAdRates(2000, mixed, { earnings: new Map([['/blog', 500], ['/home', 1500]]), views: mixed }, {
+      earnings: new Map([['Reddit', 500], ['Direct/None', 1500]]),
+      views: mixed,
+    })!;
+    expect(rates.get('/blog')! / rates.get('*')!).toBeGreaterThan(0.9);
+    expect(rates.get('/home')! / rates.get('*')!).toBeLessThan(1.1);
+  });
   it('earns nothing without pageviews to price', () => {
-    expect(computeAdRates(500, new Map([['/a', 500]]), new Map())).toBeNull();
+    expect(computeAdRates(500, [], { earnings: new Map([['/a', 500]]), views: [] })).toBeNull();
+  });
+  it('matches ad network source labels to Minilytics sources', () => {
+    expect(['Google Search', 'Direct', 'Reddit', 'Bing', 'ChatGPT', 'Other', 'Esp'].map(adSourceName)).toEqual([
+      'Google', 'Direct/None', 'Reddit', 'Bing', 'ChatGPT', '', '',
+    ]);
   });
 });

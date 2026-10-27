@@ -1,7 +1,7 @@
 import { Hono, type Context, type Next } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
-import { handleAdRevenueApi } from './ads';
+import { adSourcesTable, handleAdRevenueApi } from './ads';
 import { handleEvent } from './collect';
 import { forgetSite, type AppEnv, type Site } from './env';
 import { passwordsMatch, randomId, signToken, verifyToken } from './lib/crypto';
@@ -188,11 +188,13 @@ app.post('/api/sites/:id/rotate-key', async (c) => {
 
 app.delete('/api/sites/:id', async (c) => {
   const id = c.get('site').id;
-  await c.env.DB.batch(
-    ['events', 'sessions', 'visitors', 'payments', 'funnels', 'ad_days', 'ad_pages', 'ad_rates'].map((t) =>
+  await c.env.DB.batch([
+    adSourcesTable(c.env.DB),
+    ...['events', 'sessions', 'visitors', 'payments', 'funnels', 'ad_days', 'ad_pages', 'ad_sources', 'ad_rates'].map((t) =>
       c.env.DB.prepare(`DELETE FROM ${t} WHERE site_id = ?`).bind(id),
-    ).concat(c.env.DB.prepare('DELETE FROM sites WHERE id = ?').bind(id)),
-  );
+    ),
+    c.env.DB.prepare('DELETE FROM sites WHERE id = ?').bind(id),
+  ]);
   forgetSite(id);
   return c.json({ ok: true });
 });

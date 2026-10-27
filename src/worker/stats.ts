@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { AppEnv, Site } from './env';
 import { bucketLabels, bucketSql, resolveRange, tzOffset, type Range } from './lib/time';
-import { AD_RATE_JOINS } from './ads';
+import { AD_RATE, AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
 
 /** Filters that live on the session row (clicking a row in the dashboard adds one of these). */
@@ -158,8 +158,8 @@ function adSql(ctx: Ctx, bucket: string, from: number, to: number) {
   const f = filterSql(ctx.filters);
   return {
     sql: `SELECT ${bucket} AS b,
-            SUM(CASE WHEN a.est > 0 THEN COALESCE(r.rate, w.rate) * a.earnings / a.est ELSE 0 END) AS ad_actual,
-            SUM(CASE WHEN a.day IS NULL THEN COALESCE(r.rate, w.rate) ELSE 0 END) AS ad_est
+            SUM(CASE WHEN a.est > 0 THEN ${AD_RATE} * a.earnings / a.est ELSE 0 END) AS ad_actual,
+            SUM(CASE WHEN a.day IS NULL THEN ${AD_RATE} ELSE 0 END) AS ad_est
           FROM events e JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id
           ${AD_RATE_JOINS}
           LEFT JOIN ad_days a ON a.site_id = e.site_id AND a.day = ${bucketSql('e.ts', 'day', ctx.offset)}

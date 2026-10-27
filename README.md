@@ -97,7 +97,7 @@ At 5–10k visitors a month you'll use a few percent of this. If you outgrow it,
 
 - **Button clicks / goals:** `<button data-ml-goal="signup_click">`, or `window.minilytics('goal', 'signup', { plan: 'pro' })`
 - **Identify logged-in users:** `window.minilytics('identify', { user_id, email, name })`
-- **Ignore your own visits:** open `https://yoursite.com/?ml_ignore=true` once per browser
+- **Ignore your own visits:** open `https://yoursite.com/?ml_ignore=true` once per browser, or call `window.minilytics('ignore')` when your app knows it's you (e.g. an admin signs in)
 - **Single-page apps** (Next.js, React Router…) are handled automatically
 - **Subdomains:** `app.yoursite.com` and `yoursite.com` share the same visitor, because the cookie is set on the root domain
 
@@ -153,15 +153,17 @@ curl -X POST https://YOUR-HOST/api/v1/payments -H "Authorization: Bearer ml_..."
 ### Ad revenue
 
 If the site runs ads, send each day's ad network earnings once the network reports them (usually the next morning).
-Per-page numbers are optional but make the estimates much better:
+Per-page and per-traffic-source numbers are optional but make the estimates much better:
 
 ```bash
-curl -X POST https://YOUR-HOST/api/v1/ad-revenue -H "Authorization: Bearer ml_..." -H "Content-Type: application/json"   -d '{"days":[{"date":"2026-10-25","earnings":41.27,"pages":[{"path":"/blog/some-post","earnings":3.10,"pageviews":220}]}]}'
+curl -X POST https://YOUR-HOST/api/v1/ad-revenue -H "Authorization: Bearer ml_..." -H "Content-Type: application/json"   -d '{"days":[{"date":"2026-10-25","earnings":41.27,"pages":[{"path":"/blog/some-post","earnings":3.10,"pageviews":220}],"sources":[{"source":"Google Search","earnings":12.40,"pageviews":900}]}]}'
 ```
 
-Revenue then includes ads. A reported day is spread over that day's human pageviews by what each page earns, so it
-adds up to exactly what the network paid and shows up on sources, pages and visitors. Days the network hasn't reported
-yet (today, usually yesterday too) are estimated from the last 28 reported days and shown as estimated on the chart.
+Revenue then includes ads. A reported day is spread over that day's human pageviews by what each page and each
+traffic source earns (a Reddit visitor can be worth a fraction of a direct one on the same page), so it adds up to
+exactly what the network paid and shows up on sources, pages and visitors. Days the network hasn't reported yet (today,
+usually yesterday too) are estimated from the last 28 reported days and shown as estimated on the chart. Source names
+are matched to Minilytics's ("Google Search" counts as Google); sources it can't match share one rate.
 
 ## Accuracy notes
 

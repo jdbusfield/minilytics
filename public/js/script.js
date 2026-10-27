@@ -14,7 +14,8 @@
   var queued = (w.minilytics && w.minilytics.q) || [];
   function noop() {}
 
-  // Opt yourself out: visit any page with ?ml_ignore=true (undo with ?ml_ignore=false).
+  // Opt yourself out: visit any page with ?ml_ignore=true (undo with ?ml_ignore=false), or have the site
+  // call minilytics('ignore') when it knows it's you (e.g. signed in as an admin).
   try {
     var ig = new URLSearchParams(loc.search).get('ml_ignore');
     if (ig === 'true') localStorage.setItem('ml_ignore', '1');
@@ -80,7 +81,9 @@
       return u.toString();
     } catch (e) { return href; }
   }
+  var stopped = false;
   function send(type, extra, beacon) {
+    if (stopped) return;
     var id = ids();
     var body = { w: siteId, t: type, u: cleanUrl(loc.href), vid: id.vid, sid: id.sid, sw: w.screen ? screen.width : 0 };
     for (var k in extra) if (extra[k] !== undefined) body[k] = extra[k];
@@ -223,6 +226,11 @@
     if (cmd === 'goal' || cmd === 'track') goal(a, b);
     else if (cmd === 'identify' && a) send('identify', { p: { user_id: a.user_id || a.id, email: a.email, name: a.name } });
     else if (cmd === 'pageview') { lastPage = null; pageview(); }
+    else if (cmd === 'ignore') {
+      // Stops this page now and every later visit from this browser, same as ?ml_ignore=true.
+      try { localStorage.setItem('ml_ignore', '1'); } catch (e) {}
+      stopped = true;
+    }
   }
   api.attribution = attribution;
   w.minilytics = api;
