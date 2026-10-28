@@ -117,7 +117,7 @@ export function Avatar({ id, size = 40 }: { id: string; size?: number }) {
   const h = hash(id);
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full ring-2 ring-white"
+      className="inline-flex shrink-0 items-center justify-center rounded-full ring-2 ring-surface"
       style={{ width: size, height: size, background: BGS[h % BGS.length], fontSize: size * 0.55 }}
     >
       {FACES[(h >> 4) % FACES.length]}

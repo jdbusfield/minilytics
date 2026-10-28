@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { navigate } from '../App';
 import type { Overview, Query, Site } from '../lib/api';
 import { dayInTz } from '../lib/format';
+import { ThemeIcon, toggleTheme, useTheme } from '../lib/theme';
 import { Favicon } from './Icons';
 
 export const PERIODS: { value: string; label: string }[] = [
@@ -83,6 +84,7 @@ export function Toolbar({
   onRefresh: () => void;
   loading: boolean;
 }) {
+  const theme = useTheme();
   const [from, setFrom] = useState(q.from ?? '');
   const [to, setTo] = useState(q.to ?? '');
 
@@ -137,13 +139,22 @@ export function Toolbar({
             <button className={itemCls(false)} onClick={() => navigate('/')}>
               ＋ All websites
             </button>
+            <button
+              className={itemCls(false)}
+              onClick={() => {
+                close();
+                toggleTheme();
+              }}
+            >
+              <ThemeIcon theme={theme} /> {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+            </button>
           </>
         )}
       </Dropdown>
 
       {/* Phones: the date range, granularity and refresh get their own full-width row. */}
       <div className="order-3 flex w-full gap-2 sm:contents">
-        <div className="flex h-11 min-w-0 flex-1 items-stretch rounded-xl border border-stone-200 bg-white shadow-card sm:flex-initial">
+        <div className="flex h-11 min-w-0 flex-1 items-stretch rounded-xl border border-stone-200 bg-surface shadow-card sm:flex-initial">
           <button className="rounded-l-xl px-2 text-xl text-stone-500 hover:bg-stone-50 sm:px-3" onClick={() => shift(-1)} aria-label="Previous period">
             ‹
           </button>
@@ -236,8 +247,8 @@ export function Toolbar({
         aria-checked={!q.everyone}
         title="Hide visits with no mouse, touch or key input: crawlers that load pages like a browser. Revenue always counts."
       >
-        <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${q.everyone ? 'bg-stone-200' : 'bg-ink'}`}>
-          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${q.everyone ? 'left-0.5' : 'left-[18px]'}`} />
+        <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${q.everyone ? 'bg-stone-200 dark:bg-stone-300' : 'bg-ink'}`}>
+          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-all ${q.everyone ? 'left-0.5' : 'left-[18px]'}`} />
         </span>
         Hide bots
       </button>

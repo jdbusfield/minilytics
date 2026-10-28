@@ -31,7 +31,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
           Password
         </label>
         <input id="pw" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn-dark mt-6 w-full" disabled={busy || !password}>
           {busy ? 'Signing in…' : 'Sign in'}
         </button>

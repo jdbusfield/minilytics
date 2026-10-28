@@ -13,7 +13,7 @@ function Change({ cur, prev, invert = false }: { cur: number; prev: number; inve
   const up = pct >= 0;
   const good = invert ? !up : up;
   return (
-    <span className={`inline-flex items-center gap-0.5 text-xs ${good ? 'text-emerald-600' : 'text-red-500'}`}>
+    <span className={`inline-flex items-center gap-0.5 text-xs ${good ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
       {Math.abs(Math.round(pct * 100))}% {up ? '↑' : '↓'}
     </span>
   );
@@ -98,7 +98,7 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                   <stop offset="100%" stopColor="#8dbdf0" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
-              <CartesianGrid vertical={false} stroke="#efedea" strokeDasharray="4 4" />
+              <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="4 4" />
               <XAxis
                 dataKey="bucket"
                 tickFormatter={(b) => bucketLabel(b, g)}
@@ -129,7 +129,7 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                 domain={[0, (max: number) => Math.max(1, Math.ceil(max * 1.6))]}
               />
               <Tooltip
-                cursor={{ fill: 'rgba(28,25,23,0.03)' }}
+                cursor={{ fill: 'var(--chart-cursor)' }}
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const d = payload[0].payload as Overview['series'][0];
@@ -173,7 +173,7 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                   strokeWidth={2.5}
                   fill="url(#vis)"
                   dot={false}
-                  activeDot={{ r: 4, fill: '#7cb1ea', stroke: '#fff', strokeWidth: 2 }}
+                  activeDot={{ r: 4, fill: '#7cb1ea', stroke: 'rgb(var(--surface))', strokeWidth: 2 }}
                   isAnimationActive={false}
                 />
               )}

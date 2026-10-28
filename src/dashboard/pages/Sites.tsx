@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { navigate } from '../App';
 import { Favicon } from '../components/Icons';
 import { Logo } from '../components/Logo';
+import { ThemeButton } from '../lib/theme';
 import { Modal } from '../components/Modal';
 import { api, type Site } from '../lib/api';
 import { fmtNumber } from '../lib/format';
@@ -27,11 +28,13 @@ export function Sites() {
       <div className="flex items-center justify-between">
         <Logo />
         <div className="flex gap-2">
+          <ThemeButton />
           <button className="btn" onClick={logout}>
             Log out
           </button>
           <button className="btn-dark" onClick={() => setAdding(true)}>
-            + Add website
+            {/* "Add" alone on phones, so the row still fits with the theme button. */}
+            + Add<span className="hidden sm:inline"> website</span>
           </button>
         </div>
       </div>
@@ -114,7 +117,7 @@ function AddSite({ open, onClose }: { open: boolean; onClose: () => void }) {
             </select>
           </div>
         </div>
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn-dark w-full" disabled={!domain}>
           Add website
         </button>

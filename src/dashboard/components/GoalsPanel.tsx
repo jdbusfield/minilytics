@@ -119,7 +119,7 @@ function Funnels() {
         </button>
         {current && (
           <button
-            className="btn py-1.5 text-red-600"
+            className="btn py-1.5 text-red-600 dark:text-red-400"
             onClick={async () => {
               if (!confirm(`Delete funnel "${current.name}"?`)) return;
               await api(`/api/sites/${site.id}/funnels/${current.id}`, { method: 'DELETE' });
@@ -147,7 +147,7 @@ function Funnels() {
               <div className="text-sm text-stone-600">
                 {fmtNumber(s.visitors)} visitors · {fmtPct(pct)}
               </div>
-              {i > 0 && <div className="text-xs text-red-500">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'} drop-off</div>}
+              {i > 0 && <div className="text-xs text-red-500 dark:text-red-400">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'} drop-off</div>}
             </div>
           );
         })}
@@ -205,7 +205,7 @@ function FunnelForm({ onDone, canCancel }: { onDone: (id?: string) => void; canC
           </button>
         )}
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
     </form>
   );
 }
@@ -249,7 +249,7 @@ function VisitorCell({ id, name, email, country, city, device, os, browser, badg
 function UnlinkedPaymentCell({ name, email, renewal, badge }: Record<string, any>) {
   return (
     <div className="flex items-center gap-2.5 sm:gap-3">
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-100 text-base text-stone-400 ring-2 ring-white sm:h-11 sm:w-11 sm:text-xl">
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-stone-100 text-base text-stone-400 ring-2 ring-surface sm:h-11 sm:w-11 sm:text-xl">
         $
       </span>
       <div className="min-w-0">
@@ -308,7 +308,7 @@ function Journey({ search }: { search: string }) {
   return (
     <div className="overflow-x-auto">
       {unmatched > 0 && (
-        <div className="mx-3 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="mx-3 mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <span>
             {unmatched} payment{unmatched > 1 ? 's' : ''} not linked to a visitor yet.{' '}
             <a className="underline" href={`/site/${site.id}/settings`}>
