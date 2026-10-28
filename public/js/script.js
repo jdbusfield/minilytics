@@ -227,8 +227,10 @@
     else if (cmd === 'identify' && a) send('identify', { p: { user_id: a.user_id || a.id, email: a.email, name: a.name } });
     else if (cmd === 'pageview') { lastPage = null; pageview(); }
     else if (cmd === 'ignore') {
-      // Stops this page now and every later visit from this browser, same as ?ml_ignore=true.
+      // Stops this page now and every later visit from this browser, same as ?ml_ignore=true, and
+      // removes this visit, which was already counted before the site knew it was you.
       try { localStorage.setItem('ml_ignore', '1'); } catch (e) {}
+      if (!stopped) send('ignore', {}, true);
       stopped = true;
     }
   }

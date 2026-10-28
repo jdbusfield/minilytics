@@ -4,7 +4,7 @@ import { getSite, type AppEnv, type Site } from './env';
 import { isBot, parseUA } from './lib/ua';
 import { creditedSessionSql } from './payments';
 
-const TYPES = new Set(['pageview', 'goal', 'outbound', 'ping', 'identify']);
+const TYPES = new Set(['pageview', 'goal', 'outbound', 'ping', 'identify', 'ignore']);
 const MAX_PING_MS = 10 * 60_000;
 
 interface Payload {
@@ -120,6 +120,16 @@ export async function ingest(
       .prepare('UPDATE sessions SET duration = duration + ?, last_seen_at = ?, human = MAX(human, ?) WHERE site_id = ? AND id = ?')
       .bind(ms, now, body.h === 1 ? 1 : 0, site.id, sid)
       .run();
+    return;
+  }
+
+  // minilytics('ignore'): the site just learned this is you (e.g. an admin signed in). Remove the visit
+  // that was already counted before it knew, so the opt-out leaves nothing behind.
+  if (t === 'ignore') {
+    await db.batch([
+      db.prepare('DELETE FROM events WHERE site_id = ? AND session_id = ? AND visitor_id = ?').bind(site.id, sid, vid),
+      db.prepare('DELETE FROM sessions WHERE site_id = ? AND id = ? AND visitor_id = ?').bind(site.id, sid, vid),
+    ]);
     return;
   }
 

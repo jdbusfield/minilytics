@@ -175,6 +175,14 @@ assert(!c5.visitor_id, 'ambiguous timing is not guessed');
 const rm = (await call(`/api/sites/${site.id}/rematch`, { method: 'POST' })).body;
 assert(rm.checked === 1 && rm.matched === 0 && /too close to call/.test(rm.details[0].reason), `rematch explains: "${rm.details?.[0]?.reason}"`);
 
+// 5. minilytics('ignore') removes the visit that was counted before the site knew it was you
+const me = { vid: crypto.randomUUID(), sid: crypto.randomUUID() };
+await event(site.id, { t: 'pageview', u: 'https://smoke-test.com/admin', r: '', ...me });
+const before = (await call(`/api/sites/${site.id}/visitors/${me.vid}`)).body.sessions.length;
+r = await event(site.id, { t: 'ignore', u: 'https://smoke-test.com/admin', ...me });
+const after = (await call(`/api/sites/${site.id}/visitors/${me.vid}`)).body.sessions.length;
+assert(r.status === 202 && before === 1 && after === 0, `ignore removes the current visit (${before} -> ${after})`);
+
 for (const p of ['today', 'yesterday', '24h', '48h', '7d', '30d', '90d', '12m', 'all']) {
   const res = await call(`/api/sites/${site.id}/overview?period=${p}`);
   assert(res.status === 200 && res.body.series.length > 0, `period ${p} (${res.body.series.length} buckets, ${res.body.range.granularity})`);
