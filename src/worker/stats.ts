@@ -429,22 +429,54 @@ export async function customers(ctx: Ctx) {
 }
 
 /** Recent visitors in the period (the "Users" tab). */
-export async function visitors(ctx: Ctx) {
+// Users tab sort orders. The sort picks which 200 visitors come back, not just their order, so
+// "most time" finds the longest visitors in the whole period rather than reshuffling the latest ones.
+const VISITOR_SORTS: Record<string, string> = {
+  recent: 'last_seen DESC',
+  visits: 'sessions DESC, last_seen DESC',
+  pages: 'pageviews DESC, last_seen DESC',
+  time: 'duration DESC, last_seen DESC',
+  spent: 'spent DESC, last_seen DESC',
+};
+const TOP_PAGES = 3;
+
+export async function visitors(ctx: Ctx, sort = 'recent') {
+  const order = VISITOR_SORTS[sort] ?? VISITOR_SORTS.recent;
   const w = sessionsWhere(ctx);
   const res = await ctx.db
     .prepare(
-      `SELECT t.*, v.name, v.email, v.user_id, v.first_seen,
-              (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.site_id = t.site_id AND p.visitor_id = t.visitor_id) AS spent
+      `SELECT t.*, v.name, v.email, v.user_id, v.first_seen
        FROM (
          SELECT s.site_id, s.visitor_id, MAX(s.last_seen_at) AS last_seen, COUNT(*) AS sessions, SUM(s.pageviews) AS pageviews,
-                SUM(s.duration) AS duration, s.source, s.referrer_domain, s.country, s.city, s.device, s.os, s.browser
-         FROM sessions s WHERE ${w.sql} GROUP BY s.visitor_id ORDER BY last_seen DESC LIMIT 200
+                SUM(s.duration) AS duration, s.source, s.referrer_domain, s.country, s.city, s.device, s.os, s.browser,
+                (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.site_id = s.site_id AND p.visitor_id = s.visitor_id) AS spent
+         FROM sessions s WHERE ${w.sql} GROUP BY s.visitor_id ORDER BY ${order} LIMIT 200
        ) t LEFT JOIN visitors v ON v.site_id = t.site_id AND v.id = t.visitor_id
-       ORDER BY t.last_seen DESC`,
+       ORDER BY ${order}`,
     )
     .bind(...w.params)
-    .all();
-  return res.results;
+    .all<Record<string, unknown> & { visitor_id: string }>();
+  const rows = res.results;
+  if (!rows.length) return rows;
+
+  // Each visitor's most-viewed pages in the period (same visits as above). The ids go in as one JSON
+  // parameter: D1 caps bound parameters at 100.
+  const pages = await ctx.db
+    .prepare(
+      `SELECT e.visitor_id, e.path, COUNT(*) AS views
+       FROM events e JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id
+       WHERE ${w.sql} AND e.type = 'pageview' AND e.visitor_id IN (SELECT value FROM json_each(?))
+       GROUP BY e.visitor_id, e.path ORDER BY views DESC, e.path`,
+    )
+    .bind(...w.params, JSON.stringify(rows.map((r) => r.visitor_id)))
+    .all<{ visitor_id: string; path: string; views: number }>();
+  const top = new Map<string, { path: string; views: number }[]>();
+  for (const p of pages.results) {
+    const list = top.get(p.visitor_id) ?? [];
+    if (list.length < TOP_PAGES) list.push({ path: p.path, views: p.views });
+    top.set(p.visitor_id, list);
+  }
+  return rows.map((r) => ({ ...r, top_pages: top.get(r.visitor_id) ?? [] }));
 }
 
 /** Everything one visitor did: visits, pages, clicks, payments. */

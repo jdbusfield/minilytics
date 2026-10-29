@@ -213,7 +213,7 @@ app.get('/api/sites/:id/breakdown', async (c) => {
 
 app.post('/api/sites/:id/rematch', async (c) => c.json(await rematchPayments(c.env.DB, c.get('site'))));
 app.get('/api/sites/:id/customers', async (c) => c.json(await customers(makeCtx(c))));
-app.get('/api/sites/:id/visitors', async (c) => c.json(await visitors(makeCtx(c))));
+app.get('/api/sites/:id/visitors', async (c) => c.json(await visitors(makeCtx(c), c.req.query('sort'))));
 app.get('/api/sites/:id/visitors/:vid', async (c) =>
   c.json(await visitorProfile(c.env.DB, c.get('site'), c.req.param('vid'))),
 );

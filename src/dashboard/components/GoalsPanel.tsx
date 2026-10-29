@@ -419,33 +419,82 @@ function Journey({ search }: { search: string }) {
   );
 }
 
+type UserSort = 'recent' | 'visits' | 'pages' | 'time' | 'spent';
+const USER_SORTS: { id: UserSort; label: string }[] = [
+  { id: 'recent', label: 'Last seen' },
+  { id: 'visits', label: 'Most visits' },
+  { id: 'pages', label: 'Most pages' },
+  { id: 'time', label: 'Most time' },
+  { id: 'spent', label: 'Most spent' },
+];
+
+type TopPage = { path: string; views: number };
+
+function SortTh({ id, sort, setSort, className, children }: { id: UserSort; sort: UserSort; setSort: (s: UserSort) => void; className: string; children: string }) {
+  return (
+    <th className={className}>
+      <button className={`inline-flex items-center gap-1 font-medium hover:text-ink ${sort === id ? 'text-ink' : ''}`} onClick={() => setSort(id)} title={`Sort by ${children.toLowerCase()}`}>
+        {children}
+        <span className={sort === id ? '' : 'opacity-40'}>{sort === id ? '↓' : '↕'}</span>
+      </button>
+    </th>
+  );
+}
+
+function TopPages({ pages }: { pages: TopPage[] }) {
+  if (!pages.length) return <span className="text-stone-400">—</span>;
+  return (
+    <div className="space-y-0.5 text-sm">
+      {pages.map((p) => (
+        <div key={p.path} className="flex max-w-[260px] items-baseline gap-1.5">
+          <span className="truncate" title={p.path}>{p.path}</span>
+          {p.views > 1 && <span className="shrink-0 text-xs text-stone-400">×{p.views}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Users({ search }: { search: string }) {
   const { site, q, reloadKey, money, openVisitor } = useDash();
   const [all, setAll] = useState(false);
-  const { data } = useApi<any[]>(`/api/sites/${site.id}/visitors?${qs(q)}`, reloadKey);
+  const [sort, setSort] = useState<UserSort>('recent');
+  const { data } = useApi<any[]>(`/api/sites/${site.id}/visitors?${qs(q, { sort })}`, reloadKey);
   if (!data) return <div className="h-40 animate-pulse" />;
   if (!data.length) return <div className="p-8 text-center text-sm text-stone-500">No visitors in this period.</div>;
+  const rows = data.filter((r) => matches(r, search) || (search && r.top_pages?.some((p: TopPage) => p.path.toLowerCase().includes(search.toLowerCase()))));
+  const th = 'hidden pb-3 text-right sm:table-cell';
   return (
     <div className="overflow-x-auto">
-      {/* Phones show Visitor (with its source underneath) and Last seen; tapping a row opens the visitor. */}
-      <table className="w-full text-[15px] sm:min-w-[760px]">
+      {/* Phones have no column headers, so the sort is a menu. */}
+      <div className="px-3 pb-2 sm:hidden">
+        <select className="input w-auto py-1.5" value={sort} onChange={(e) => setSort(e.target.value as UserSort)} aria-label="Sort visitors">
+          {USER_SORTS.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* Phones show Visitor (with its source and top page underneath) and Last seen; tapping a row opens the visitor. */}
+      <table className="w-full text-[15px] sm:min-w-[960px]">
         <thead>
           <tr className="text-left text-sm text-stone-500">
             <th className="px-3 pb-3 font-medium">Visitor</th>
             <th className="hidden pb-3 font-medium sm:table-cell">Source</th>
-            <th className="hidden pb-3 text-right font-medium sm:table-cell">Visits</th>
-            <th className="hidden pb-3 text-right font-medium sm:table-cell">Pages</th>
-            <th className="hidden pb-3 text-right font-medium sm:table-cell">Time</th>
-            <th className="hidden pb-3 text-right font-medium sm:table-cell">Spent</th>
-            <th className="px-3 pb-3 text-right font-medium">Last seen</th>
+            <th className="hidden pb-3 font-medium sm:table-cell">Top pages</th>
+            <SortTh id="visits" sort={sort} setSort={setSort} className={th}>Visits</SortTh>
+            <SortTh id="pages" sort={sort} setSort={setSort} className={th}>Pages</SortTh>
+            <SortTh id="time" sort={sort} setSort={setSort} className={th}>Time</SortTh>
+            <SortTh id="spent" sort={sort} setSort={setSort} className={th}>Spent</SortTh>
+            <SortTh id="recent" sort={sort} setSort={setSort} className="px-3 pb-3 text-right">Last seen</SortTh>
           </tr>
         </thead>
         <tbody>
-          {data
-            .filter((r) => matches(r, search))
+          {rows
             .slice(0, all || search ? undefined : 10)
             .map((r) => (
-              <tr key={r.visitor_id} className="cursor-pointer border-t border-stone-100 hover:bg-stone-50" onClick={() => openVisitor(r.visitor_id)}>
+              <tr key={r.visitor_id} className="cursor-pointer border-t border-stone-100 align-top hover:bg-stone-50" onClick={() => openVisitor(r.visitor_id)}>
                 <td className="px-3 py-3">
                   <VisitorCell
                     id={r.visitor_id}
@@ -461,11 +510,20 @@ function Users({ search }: { search: string }) {
                   <div className="ml-[42px] mt-1 flex items-center gap-1.5 text-sm text-stone-500 sm:hidden">
                     <SourceIcon source={r.source} domain={r.referrer_domain} /> {r.source}
                   </div>
+                  {r.top_pages?.[0] && (
+                    <div className="ml-[42px] mt-0.5 truncate text-sm text-stone-500 sm:hidden">
+                      {r.top_pages[0].path}
+                      {r.top_pages[0].views > 1 ? ` ×${r.top_pages[0].views}` : ''}
+                    </div>
+                  )}
                 </td>
                 <td className="hidden py-3 sm:table-cell">
                   <div className="flex items-center gap-2">
                     <SourceIcon source={r.source} domain={r.referrer_domain} /> {r.source}
                   </div>
+                </td>
+                <td className="hidden py-3 pr-3 sm:table-cell">
+                  <TopPages pages={r.top_pages ?? []} />
                 </td>
                 <td className="hidden py-3 text-right sm:table-cell">{r.sessions}</td>
                 <td className="hidden py-3 text-right sm:table-cell">{r.pageviews}</td>
@@ -476,7 +534,7 @@ function Users({ search }: { search: string }) {
             ))}
         </tbody>
       </table>
-      {!search && <ShowAll total={data.length} shown={all ? data.length : 10} onClick={() => setAll(true)} />}
+      {!search && <ShowAll total={rows.length} shown={all ? rows.length : 10} onClick={() => setAll(true)} />}
     </div>
   );
 }
