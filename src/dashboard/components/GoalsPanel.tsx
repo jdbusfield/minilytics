@@ -4,6 +4,7 @@ import { useDash } from '../lib/context';
 import { countryName, fmtAgo, fmtDateTime, fmtDuration, fmtNumber, fmtPct, shortId } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { Avatar, BrowserIcon, DeviceIcon, Flag, OSIcon, SourceIcon } from './Icons';
+import { PlanBadge } from './PlanBadge';
 
 type Tab = 'goal' | 'funnel' | 'user' | 'journey';
 
@@ -266,7 +267,7 @@ function UnlinkedPaymentCell({ name, email, renewal, badge }: Record<string, any
 function matches(r: Record<string, any>, search: string) {
   if (!search) return true;
   const s = search.toLowerCase();
-  return ['name', 'email', 'pay_email', 'pay_name', 'source', 'country', 'city', 'visitor_id', 'utm_campaign', 'ref'].some((k) =>
+  return ['name', 'email', 'pay_email', 'pay_name', 'user_id', 'plan', 'source', 'country', 'city', 'visitor_id', 'utm_campaign', 'ref'].some((k) =>
     String(r[k] ?? '').toLowerCase().includes(s),
   );
 }
@@ -459,23 +460,47 @@ function Users({ search }: { search: string }) {
   const { site, q, reloadKey, money, openVisitor } = useDash();
   const [all, setAll] = useState(false);
   const [sort, setSort] = useState<UserSort>('recent');
-  const { data } = useApi<any[]>(`/api/sites/${site.id}/visitors?${qs(q, { sort })}`, reloadKey);
+  // '' = everyone, 'signed_in', or 'plan:<name>'. Only offered once the site sends identify().
+  const [who, setWho] = useState('');
+  const { data: groups } = useApi<{ signedIn: boolean; plans: string[] }>(`/api/sites/${site.id}/visitor-groups`, reloadKey);
+  const { data } = useApi<any[]>(`/api/sites/${site.id}/visitors?${qs(q, { sort, who })}`, reloadKey);
+  const showWho = !!groups && (groups.signedIn || groups.plans.length > 0);
+  const controls = (
+    <div className={`flex flex-wrap gap-2 px-3 pb-2 ${showWho ? '' : 'sm:hidden'}`}>
+      {showWho && (
+        <select className="input w-auto py-1.5" value={who} onChange={(e) => setWho(e.target.value)} aria-label="Show visitors">
+          <option value="">Everyone</option>
+          <option value="signed_in">Signed in</option>
+          {groups.plans.map((p) => (
+            <option key={p} value={`plan:${p}`}>
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </option>
+          ))}
+        </select>
+      )}
+      {/* Phones have no column headers, so the sort is a menu. */}
+      <select className="input w-auto py-1.5 sm:hidden" value={sort} onChange={(e) => setSort(e.target.value as UserSort)} aria-label="Sort visitors">
+        {USER_SORTS.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
   if (!data) return <div className="h-40 animate-pulse" />;
-  if (!data.length) return <div className="p-8 text-center text-sm text-stone-500">No visitors in this period.</div>;
+  if (!data.length)
+    return (
+      <div>
+        {controls}
+        <div className="p-8 text-center text-sm text-stone-500">{who ? 'No one like that in this period.' : 'No visitors in this period.'}</div>
+      </div>
+    );
   const rows = data.filter((r) => matches(r, search) || (search && r.top_pages?.some((p: TopPage) => p.path.toLowerCase().includes(search.toLowerCase()))));
   const th = 'hidden pb-3 text-right sm:table-cell';
   return (
     <div className="overflow-x-auto">
-      {/* Phones have no column headers, so the sort is a menu. */}
-      <div className="px-3 pb-2 sm:hidden">
-        <select className="input w-auto py-1.5" value={sort} onChange={(e) => setSort(e.target.value as UserSort)} aria-label="Sort visitors">
-          {USER_SORTS.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      {controls}
       {/* Phones show Visitor (with its source and top page underneath) and Last seen; tapping a row opens the visitor. */}
       <table className="w-full text-[15px] sm:min-w-[960px]">
         <thead>
@@ -505,7 +530,12 @@ function Users({ search }: { search: string }) {
                     device={r.device}
                     os={r.os}
                     browser={r.browser}
-                    badge={r.spent > 0 ? <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">Customer</span> : null}
+                    badge={
+                      <>
+                        <PlanBadge plan={r.plan} />
+                        {r.spent > 0 && <span className="rounded-md border border-revenue/30 bg-revenueSoft/50 px-1.5 py-0.5 text-xs text-revenue">Customer</span>}
+                      </>
+                    }
                   />
                   <div className="ml-[42px] mt-1 flex items-center gap-1.5 text-sm text-stone-500 sm:hidden">
                     <SourceIcon source={r.source} domain={r.referrer_domain} /> {r.source}

@@ -3,6 +3,7 @@ import { classify } from '../shared/sources';
 import { getSite, type AppEnv, type Site } from './env';
 import { isBot, parseUA } from './lib/ua';
 import { creditedSessionSql } from './payments';
+import { traitUrl, visitorTraitsTable } from './traits';
 
 const TYPES = new Set(['pageview', 'goal', 'outbound', 'ping', 'identify', 'ignore']);
 const MAX_PING_MS = 10 * 60_000;
@@ -143,6 +144,21 @@ export async function ingest(
         )
         .bind(clip(p.user_id, 128), clip(p.email, 200)?.toLowerCase() ?? null, clip(p.name, 128), site.id, vid),
     ]);
+    // Plan and admin link: the latest identify wins, so a downgrade to "free" shows on the next visit.
+    const plan = clip(p.plan, 32)?.toLowerCase() ?? null;
+    const link = traitUrl(p.url, site.domain);
+    if (plan || link) {
+      await db.batch([
+        visitorTraitsTable(db),
+        db
+          .prepare(
+            `INSERT INTO visitor_traits (site_id, visitor_id, plan, url, updated_at) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (site_id, visitor_id) DO UPDATE SET plan = COALESCE(excluded.plan, plan), url = COALESCE(excluded.url, url),
+               updated_at = excluded.updated_at`,
+          )
+          .bind(site.id, vid, plan, link, now),
+      ]);
+    }
     return;
   }
 

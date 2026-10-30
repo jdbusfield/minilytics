@@ -183,6 +183,21 @@ r = await event(site.id, { t: 'ignore', u: 'https://smoke-test.com/admin', ...me
 const after = (await call(`/api/sites/${site.id}/visitors/${me.vid}`)).body.sessions.length;
 assert(r.status === 202 && before === 1 && after === 0, `ignore removes the current visit (${before} -> ${after})`);
 
+// 6. identify() with a plan and an admin link: badge, filter and link; links off the site's domain are dropped
+const pro = { vid: crypto.randomUUID(), sid: crypto.randomUUID() };
+await event(site.id, { t: 'pageview', u: 'https://smoke-test.com/', r: '', ...pro });
+await event(site.id, { t: 'identify', u: 'https://smoke-test.com/', p: { user_id: 'u1', name: 'Pat', plan: 'Pro', url: 'https://smoke-test.com/admin?user=u1' }, ...pro });
+let vp = (await call(`/api/sites/${site.id}/visitors/${pro.vid}`)).body.visitor;
+assert(vp.plan === 'pro' && vp.user_url === 'https://smoke-test.com/admin?user=u1', 'identify stores plan and admin link');
+await event(site.id, { t: 'identify', u: 'https://smoke-test.com/', p: { user_id: 'u1', plan: 'free', url: 'https://evil.com/x' }, ...pro });
+vp = (await call(`/api/sites/${site.id}/visitors/${pro.vid}`)).body.visitor;
+assert(vp.plan === 'free' && vp.user_url === 'https://smoke-test.com/admin?user=u1', 'plan follows the latest identify; off-domain link ignored');
+const groups = (await call(`/api/sites/${site.id}/visitor-groups`)).body;
+assert(groups.signedIn && groups.plans.includes('free'), 'visitor groups list the plans');
+const onlyFree = (await call(`/api/sites/${site.id}/visitors?period=today&who=plan:free`)).body;
+const signedIn = (await call(`/api/sites/${site.id}/visitors?period=today&who=signed_in`)).body;
+assert(onlyFree.length === 1 && onlyFree[0].visitor_id === pro.vid && signedIn.length >= 1, `who filter (${onlyFree.length} free, ${signedIn.length} signed in)`);
+
 for (const p of ['today', 'yesterday', '24h', '48h', '7d', '30d', '90d', '12m', 'all']) {
   const res = await call(`/api/sites/${site.id}/overview?period=${p}`);
   assert(res.status === 200 && res.body.series.length > 0, `period ${p} (${res.body.series.length} buckets, ${res.body.range.granularity})`);

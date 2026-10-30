@@ -3,6 +3,7 @@ import type { AppEnv, Site } from './env';
 import { bucketLabels, bucketSql, resolveRange, tzOffset, type Range } from './lib/time';
 import { AD_RATE, AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
+import { ensureVisitorTraits, visitorTraitsTable } from './traits';
 
 /** Filters that live on the session row (clicking a row in the dashboard adds one of these). */
 const SESSION_FILTERS = [
@@ -440,21 +441,33 @@ const VISITOR_SORTS: Record<string, string> = {
 };
 const TOP_PAGES = 3;
 
-export async function visitors(ctx: Ctx, sort = 'recent') {
+// Users tab "who" filter: everyone, people who signed in (identify() sent a user id), or one plan.
+function whoSql(who: string): { sql: string; params: string[] } {
+  if (who === 'signed_in')
+    return { sql: ' AND s.visitor_id IN (SELECT id FROM visitors WHERE site_id = s.site_id AND user_id IS NOT NULL)', params: [] };
+  if (who.startsWith('plan:'))
+    return { sql: ' AND s.visitor_id IN (SELECT visitor_id FROM visitor_traits WHERE site_id = s.site_id AND plan = ?)', params: [who.slice(5)] };
+  return { sql: '', params: [] };
+}
+
+export async function visitors(ctx: Ctx, sort = 'recent', who = '') {
   const order = VISITOR_SORTS[sort] ?? VISITOR_SORTS.recent;
   const w = sessionsWhere(ctx);
+  const f = whoSql(who);
+  await ensureVisitorTraits(ctx.db);
   const res = await ctx.db
     .prepare(
-      `SELECT t.*, v.name, v.email, v.user_id, v.first_seen
+      `SELECT t.*, v.name, v.email, v.user_id, v.first_seen, vt.plan, vt.url AS user_url
        FROM (
          SELECT s.site_id, s.visitor_id, MAX(s.last_seen_at) AS last_seen, COUNT(*) AS sessions, SUM(s.pageviews) AS pageviews,
                 SUM(s.duration) AS duration, s.source, s.referrer_domain, s.country, s.city, s.device, s.os, s.browser,
                 (SELECT COALESCE(SUM(amount), 0) FROM payments p WHERE p.site_id = s.site_id AND p.visitor_id = s.visitor_id) AS spent
-         FROM sessions s WHERE ${w.sql} GROUP BY s.visitor_id ORDER BY ${order} LIMIT 200
+         FROM sessions s WHERE ${w.sql}${f.sql} GROUP BY s.visitor_id ORDER BY ${order} LIMIT 200
        ) t LEFT JOIN visitors v ON v.site_id = t.site_id AND v.id = t.visitor_id
+       LEFT JOIN visitor_traits vt ON vt.site_id = t.site_id AND vt.visitor_id = t.visitor_id
        ORDER BY ${order}`,
     )
-    .bind(...w.params)
+    .bind(...w.params, ...f.params)
     .all<Record<string, unknown> & { visitor_id: string }>();
   const rows = res.results;
   if (!rows.length) return rows;
@@ -479,18 +492,31 @@ export async function visitors(ctx: Ctx, sort = 'recent') {
   return rows.map((r) => ({ ...r, top_pages: top.get(r.visitor_id) ?? [] }));
 }
 
+/** What the Users tab can filter by: whether anyone signed in, and the plans identify() has reported. */
+export async function visitorGroups(db: D1Database, site: Site) {
+  await ensureVisitorTraits(db);
+  const [s, p] = await db.batch([
+    db.prepare('SELECT 1 FROM visitors WHERE site_id = ? AND user_id IS NOT NULL LIMIT 1').bind(site.id),
+    db.prepare('SELECT plan, COUNT(*) AS n FROM visitor_traits WHERE site_id = ? AND plan IS NOT NULL GROUP BY plan ORDER BY n DESC LIMIT 20').bind(site.id),
+  ]);
+  return { signedIn: s.results.length > 0, plans: (p.results as { plan: string }[]).map((r) => r.plan) };
+}
+
 /** Everything one visitor did: visits, pages, clicks, payments. */
 export async function visitorProfile(db: D1Database, site: Site, vid: string) {
-  const [v, s, e, p] = await db.batch([
+  const [, v, s, e, p, t] = await db.batch([
+    visitorTraitsTable(db),
     db.prepare('SELECT * FROM visitors WHERE site_id = ? AND id = ?').bind(site.id, vid),
     db.prepare('SELECT * FROM sessions WHERE site_id = ? AND visitor_id = ? ORDER BY started_at DESC LIMIT 100').bind(site.id, vid),
     db
       .prepare('SELECT session_id, ts, type, name, path, props FROM events WHERE site_id = ? AND visitor_id = ? ORDER BY ts DESC LIMIT 1000')
       .bind(site.id, vid),
     db.prepare('SELECT * FROM payments WHERE site_id = ? AND visitor_id = ? ORDER BY ts DESC').bind(site.id, vid),
+    db.prepare('SELECT plan, url FROM visitor_traits WHERE site_id = ? AND visitor_id = ?').bind(site.id, vid),
   ]);
+  const traits = (t.results[0] ?? {}) as { plan?: string | null; url?: string | null };
   return {
-    visitor: v.results[0] ?? null,
+    visitor: v.results[0] ? { ...v.results[0], plan: traits.plan ?? null, user_url: traits.url ?? null } : null,
     sessions: s.results,
     events: e.results,
     payments: p.results,

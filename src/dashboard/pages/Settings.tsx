@@ -124,7 +124,7 @@ async rewrites() {
   window.minilytics('goal', 'signup', { plan: 'pro' });
 
   // After login: attach a name/email to the visitor
-  window.minilytics('identify', { user_id: '123', email: 'jane@acme.com', name: 'Jane' });
+  window.minilytics('identify', { user_id: '123', email: 'jane@acme.com', name: 'Jane', plan: 'pro' });
 </script>`}</Code>
         <p className="mt-3 text-sm text-stone-500">Outbound link clicks are tracked automatically (Exit link tab).</p>
       </Section>

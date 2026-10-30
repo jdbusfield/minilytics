@@ -97,6 +97,8 @@ At 5–10k visitors a month you'll use a few percent of this. If you outgrow it,
 
 - **Button clicks / goals:** `<button data-ml-goal="signup_click">`, or `window.minilytics('goal', 'signup', { plan: 'pro' })`
 - **Identify logged-in users:** `window.minilytics('identify', { user_id, email, name })`
+  - Optional `plan` (e.g. `'pro'` or `'free'`) shows a badge and a Users tab filter; optional `url` (a link to that user in
+    your own admin, on your site's domain) adds an "Open in admin" link to the visitor profile.
 - **Ignore your own visits:** open `https://yoursite.com/?ml_ignore=true` once per browser, or call `window.minilytics('ignore')` when your app knows it's you (e.g. an admin signs in). The call also removes the visit already counted in that tab
 - **Single-page apps** (Next.js, React Router…) are handled automatically
 - **Subdomains:** `app.yoursite.com` and `yoursite.com` share the same visitor, because the cookie is set on the root domain

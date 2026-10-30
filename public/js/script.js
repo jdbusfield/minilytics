@@ -224,7 +224,7 @@
   // ---- public API
   function api(cmd, a, b) {
     if (cmd === 'goal' || cmd === 'track') goal(a, b);
-    else if (cmd === 'identify' && a) send('identify', { p: { user_id: a.user_id || a.id, email: a.email, name: a.name } });
+    else if (cmd === 'identify' && a) send('identify', { p: { user_id: a.user_id || a.id, email: a.email, name: a.name, plan: a.plan, url: a.url } });
     else if (cmd === 'pageview') { lastPage = null; pageview(); }
     else if (cmd === 'ignore') {
       // Stops this page now and every later visit from this browser, same as ?ml_ignore=true, and

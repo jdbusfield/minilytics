@@ -3,9 +3,18 @@ import { countryName, fmtAgo, fmtDateTime, fmtDuration, shortId } from '../lib/f
 import { useApi } from '../lib/useApi';
 import { Avatar, BrowserIcon, DeviceIcon, Flag, OSIcon, SourceIcon } from './Icons';
 import { Modal } from './Modal';
+import { PlanBadge } from './PlanBadge';
 
 interface Profile {
-  visitor: { id: string; first_seen: number; name: string | null; email: string | null; user_id: string | null } | null;
+  visitor: {
+    id: string;
+    first_seen: number;
+    name: string | null;
+    email: string | null;
+    user_id: string | null;
+    plan: string | null;
+    user_url: string | null;
+  } | null;
   sessions: any[];
   events: { session_id: string; ts: number; type: string; name: string | null; path: string; props: string | null }[];
   payments: any[];
@@ -40,8 +49,21 @@ export function VisitorModal({ visitorId, onClose }: { visitorId: string | null;
               <Avatar id={visitorId!} size={64} />
             </span>
             <div className="min-w-0">
-              <div className="truncate text-xl font-semibold">{p.visitor?.name || p.visitor?.email || `Visitor ${shortId(visitorId!)}`}</div>
+              <div className="flex items-center gap-2">
+                <span className="truncate text-xl font-semibold">{p.visitor?.name || p.visitor?.email || `Visitor ${shortId(visitorId!)}`}</span>
+                <PlanBadge plan={p.visitor?.plan} />
+              </div>
               {p.visitor?.email && p.visitor.name && <div className="text-sm text-stone-500 [overflow-wrap:anywhere]">{p.visitor.email}</div>}
+              {p.visitor?.user_url && (
+                <a
+                  className="mt-0.5 inline-block text-sm font-medium text-violet-700 hover:underline dark:text-violet-300"
+                  href={p.visitor.user_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open in {new URL(p.visitor.user_url).hostname.replace(/^www\./, '')} admin ↗
+                </a>
+              )}
               {last && (
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-stone-500">
                   <span className="flex items-center gap-1">
