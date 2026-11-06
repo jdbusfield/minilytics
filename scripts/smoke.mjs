@@ -198,6 +198,19 @@ const onlyFree = (await call(`/api/sites/${site.id}/visitors?period=today&who=pl
 const signedIn = (await call(`/api/sites/${site.id}/visitors?period=today&who=signed_in`)).body;
 assert(onlyFree.length === 1 && onlyFree[0].visitor_id === pro.vid && signedIn.length >= 1, `who filter (${onlyFree.length} free, ${signedIn.length} signed in)`);
 
+// 7. Sections: a visit belongs to the section of the page it started on, and the catch-all is the rest
+const fr = (await call('/api/sites', { method: 'POST', body: JSON.stringify({ domain: 'fanranked.com', name: 'Sections', timezone: 'UTC', currency: 'USD' }) })).body;
+for (const path of ['/football/ros-rankings', '/blog/2026-08-24-ashton-jeanty-injury-adp', '/leagues/new', '/', '/dynasty-rankings', '/blog/top-50-dynasty-baseball-players', '/player/juan-soto']) {
+  await event(fr.id, { t: 'pageview', u: `https://www.fanranked.com${path}`, r: '', vid: crypto.randomUUID(), sid: crypto.randomUUID() });
+}
+const inSection = async (section) => {
+  const f = section ? `&filters=${encodeURIComponent(JSON.stringify({ section }))}` : '';
+  return (await call(`/api/sites/${fr.id}/overview?period=today${f}`)).body.current.sessions;
+};
+const counts = [await inSection(), await inSection('Football'), await inSection('Shared'), await inSection('Baseball'), await inSection('Hockey')];
+assert(counts.join() === '7,2,2,3,7', `sections split the visits (${counts})`);
+await call(`/api/sites/${fr.id}`, { method: 'DELETE' });
+
 for (const p of ['today', 'yesterday', '24h', '48h', '7d', '30d', '90d', '12m', 'all']) {
   const res = await call(`/api/sites/${site.id}/overview?period=${p}`);
   assert(res.status === 200 && res.body.series.length > 0, `period ${p} (${res.body.series.length} buckets, ${res.body.range.granularity})`);

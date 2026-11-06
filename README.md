@@ -101,6 +101,7 @@ At 5–10k visitors a month you'll use a few percent of this. If you outgrow it,
     your own admin, on your site's domain) adds an "Open in admin" link to the visitor profile.
 - **Ignore your own visits:** open `https://yoursite.com/?ml_ignore=true` once per browser, or call `window.minilytics('ignore')` when your app knows it's you (e.g. an admin signs in). The call also removes the visit already counted in that tab
 - **Single-page apps** (Next.js, React Router…) are handled automatically
+- **Site sections:** to split a site (FanRanked's Baseball / Football switch), list its sections in `src/shared/sections.ts`
 - **Subdomains:** `app.yoursite.com` and `yoursite.com` share the same visitor, because the cookie is set on the root domain
 
 ### Tracking a specific tweet / article

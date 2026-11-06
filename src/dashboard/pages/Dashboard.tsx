@@ -10,6 +10,7 @@ import { DashContext, type Dash } from '../lib/context';
 import { fmtMoney } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { useQueryState } from '../lib/useQueryState';
+import { sectionsFor } from '../../shared/sections';
 
 const FILTER_LABELS: Record<string, { label: string; dim: string }> = {
   channel: { label: 'Channel', dim: 'channel' },
@@ -71,14 +72,32 @@ export function Dashboard({ siteId }: { siteId: string }) {
   }
   if (!dash || !site) return null;
 
+  const sections = sectionsFor(site.domain);
+  // The section has its own switch, so it isn't listed with the other filters.
+  const { section, ...chips } = q.filters;
+  const setSection = (name?: string) => update({ filters: name ? { ...chips, section: name } : chips });
+
   return (
     <DashContext.Provider value={dash}>
       <div className="mx-auto max-w-[1480px] px-3 py-6 sm:px-6 lg:py-10">
         <Toolbar site={site} sites={sites!} q={q} update={update} overview={overview} onRefresh={() => setReloadKey((k) => k + 1)} loading={loading} />
 
-        {Object.keys(q.filters).length > 0 && (
+        {sections.length > 0 && (
+          <div className="tabs mt-4 w-fit">
+            <button className={`tab ${section ? '' : 'tab-active'}`} onClick={() => setSection()}>
+              All
+            </button>
+            {sections.map((s) => (
+              <button key={s.name} className={`tab ${section === s.name ? 'tab-active' : ''}`} onClick={() => setSection(s.name)}>
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {Object.keys(chips).length > 0 && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {Object.entries(q.filters).map(([k, v]) => (
+            {Object.entries(chips).map(([k, v]) => (
               <span key={k} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-surface py-1 pl-3 pr-1 text-sm shadow-card">
                 <span className="text-stone-500">{FILTER_LABELS[k]?.label ?? k} is</span>
                 <span className="flex items-center gap-1.5 font-medium">{renderLabel(FILTER_LABELS[k]?.dim ?? k, { label: v || null })}</span>
@@ -87,7 +106,7 @@ export function Dashboard({ siteId }: { siteId: string }) {
                 </button>
               </span>
             ))}
-            <button className="text-sm text-stone-500 underline-offset-2 hover:underline" onClick={() => update({ filters: {} })}>
+            <button className="text-sm text-stone-500 underline-offset-2 hover:underline" onClick={() => update({ filters: section ? { section } : {} })}>
               Clear all
             </button>
           </div>

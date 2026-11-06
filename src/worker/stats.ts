@@ -4,6 +4,7 @@ import { bucketLabels, bucketSql, resolveRange, tzOffset, type Range } from './l
 import { AD_RATE, AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
 import { ensureVisitorTraits, visitorTraitsTable } from './traits';
+import { sectionMatch } from '../shared/sections';
 
 /** Filters that live on the session row (clicking a row in the dashboard adds one of these). */
 const SESSION_FILTERS = [
@@ -27,9 +28,9 @@ const SESSION_FILTERS = [
   'hostname',
 ] as const;
 
-export type Filters = Partial<Record<(typeof SESSION_FILTERS)[number] | 'page' | 'goal', string>>;
+export type Filters = Partial<Record<(typeof SESSION_FILTERS)[number] | 'page' | 'goal' | 'section', string>>;
 
-export function parseFilters(raw: string | undefined): Filters {
+export function parseFilters(raw: string | undefined, domain = ''): Filters {
   if (!raw) return {};
   try {
     const obj = JSON.parse(raw);
@@ -37,6 +38,8 @@ export function parseFilters(raw: string | undefined): Filters {
     for (const k of [...SESSION_FILTERS, 'page', 'goal'] as const) {
       if (typeof obj[k] === 'string') out[k] = obj[k].slice(0, 500);
     }
+    // Dropped when this site has no such section (the URL keeps it when you switch sites).
+    if (typeof obj.section === 'string' && sectionMatch(domain, obj.section)) out.section = obj.section;
     return out;
   } catch {
     return {};
@@ -44,7 +47,7 @@ export function parseFilters(raw: string | undefined): Filters {
 }
 
 /** SQL + params restricting sessions `s` by the dashboard filters (not by time). */
-function filterSql(f: Filters): { sql: string; params: unknown[] } {
+function filterSql({ filters: f, site }: Pick<Ctx, 'filters' | 'site'>): { sql: string; params: unknown[] } {
   const parts: string[] = [];
   const params: unknown[] = [];
   for (const k of SESSION_FILTERS) {
@@ -55,6 +58,12 @@ function filterSql(f: Filters): { sql: string; params: unknown[] } {
       parts.push(`s.${k} = ?`);
       params.push(v);
     }
+  }
+  const section = f.section ? sectionMatch(site.domain, f.section) : null;
+  if (section) {
+    // One JSON parameter, as in visitors(): D1 caps bound parameters at 100.
+    parts.push(`${section.exclude ? 'NOT ' : ''}EXISTS (SELECT 1 FROM json_each(?) WHERE COALESCE(s.entry_page, '') GLOB value)`);
+    params.push(JSON.stringify(section.patterns));
   }
   if (f.page) {
     parts.push(`EXISTS (SELECT 1 FROM events fe WHERE fe.site_id = s.site_id AND fe.session_id = s.id AND fe.type = 'pageview' AND fe.path = ?)`);
@@ -81,7 +90,7 @@ interface Ctx {
 
 /** filterSql plus the humans-only condition: for anything that counts visits. */
 function visitSql(ctx: Ctx) {
-  const f = filterSql(ctx.filters);
+  const f = filterSql(ctx);
   return ctx.humans ? { sql: f.sql + ' AND s.human = 1', params: f.params } : f;
 }
 const visitsNeedSessions = (ctx: Ctx) => ctx.humans || hasFilters(ctx.filters);
@@ -94,7 +103,7 @@ export function makeCtx(c: Context<AppEnv>): Ctx {
     db: c.env.DB,
     site,
     range,
-    filters: parseFilters(q.filters),
+    filters: parseFilters(q.filters, site.domain),
     humans: q.humans === '1',
     offset: tzOffset(site.timezone, range.to),
   };
@@ -113,7 +122,7 @@ function paymentsFrom(ctx: Ctx, from = ctx.range.from, to = ctx.range.to) {
   if (!hasFilters(ctx.filters)) {
     return { sql: `payments p WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?`, params: [ctx.site.id, from, to] };
   }
-  const f = filterSql(ctx.filters);
+  const f = filterSql(ctx);
   return {
     sql: `payments p JOIN sessions s ON s.site_id = p.site_id AND s.id = p.session_id
           WHERE p.site_id = ? AND p.ts >= ? AND p.ts < ?${f.sql}`,
@@ -156,7 +165,7 @@ interface AdRow {
  * nothing, and this doesn't move with the Hide bots switch.
  */
 function adSql(ctx: Ctx, bucket: string, from: number, to: number) {
-  const f = filterSql(ctx.filters);
+  const f = filterSql(ctx);
   return {
     sql: `SELECT ${bucket} AS b,
             SUM(CASE WHEN a.est > 0 THEN ${AD_RATE} * a.earnings / a.est ELSE 0 END) AS ad_actual,
@@ -410,7 +419,7 @@ function merge(visits: any[], revenue: any[], ads: any[] = []): BreakdownRow[] {
 /** Customers in the period, with where they came from (the "Journey" tab). */
 export async function customers(ctx: Ctx) {
   const { db, site, range } = ctx;
-  const f = filterSql(ctx.filters);
+  const f = filterSql(ctx);
   const join = hasFilters(ctx.filters) ? 'JOIN' : 'LEFT JOIN';
   const res = await db
     .prepare(
