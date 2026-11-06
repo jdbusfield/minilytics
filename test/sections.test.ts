@@ -3,8 +3,8 @@ import { sectionMatch, sectionsFor } from '../src/shared/sections';
 
 describe('sections', () => {
   it('only sites with sections get the switch', () => {
-    expect(sectionsFor('fanranked.com').map((s) => s.name)).toEqual(['Baseball', 'Football', 'Shared']);
-    expect(sectionsFor('www.FanRanked.com')).toHaveLength(3);
+    expect(sectionsFor('fanranked.com').map((s) => s.name)).toEqual(['Baseball', 'Football']);
+    expect(sectionsFor('www.FanRanked.com')).toHaveLength(2);
     expect(sectionsFor('hdrsiteservices.com')).toEqual([]);
   });
 
@@ -17,7 +17,7 @@ describe('sections', () => {
   it('the catch-all is everything the other sections claim, left out', () => {
     const m = sectionMatch('fanranked.com', 'Baseball')!;
     expect(m.exclude).toBe(true);
-    expect(m.patterns).toEqual(expect.arrayContaining(['/football/*', '/leagues/*', '/']));
+    expect(m.patterns).toEqual(expect.arrayContaining(['/football', '/football/*']));
   });
 
   it("every pattern fits D1's 50-byte GLOB limit", () => {

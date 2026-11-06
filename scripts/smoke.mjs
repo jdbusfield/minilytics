@@ -207,8 +207,8 @@ const inSection = async (section) => {
   const f = section ? `&filters=${encodeURIComponent(JSON.stringify({ section }))}` : '';
   return (await call(`/api/sites/${fr.id}/overview?period=today${f}`)).body.current.sessions;
 };
-const counts = [await inSection(), await inSection('Football'), await inSection('Shared'), await inSection('Baseball'), await inSection('Hockey')];
-assert(counts.join() === '7,2,2,3,7', `sections split the visits (${counts})`);
+const counts = [await inSection(), await inSection('Football'), await inSection('Baseball'), await inSection('Hockey')];
+assert(counts.join() === '7,2,5,7', `sections split the visits (${counts})`);
 await call(`/api/sites/${fr.id}`, { method: 'DELETE' });
 
 for (const p of ['today', 'yesterday', '24h', '48h', '7d', '30d', '90d', '12m', 'all']) {
