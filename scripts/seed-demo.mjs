@@ -68,8 +68,8 @@ for (let d = 34; d >= 0; d--) {
       t += Math.floor(duration / pages.length);
       return e;
     });
-    if (!bounce && rand() < 0.25) events.push([t, 'goal', 'signup_click', pages.at(-1)]);
-    if (wantsToBuy) events.push([t + 1000, 'goal', 'checkout_click', '/pricing'], [t + 2000, 'outbound', 'https://checkout.dodopayments.com/buy/pdt_pro', '/pricing']);
+    if (!bounce && rand() < 0.25) events.push([t, 'goal', 'signup_click', pages.at(-1), { placement: pick(['header', 'hero', 'footer', 'blog_inline']) }]);
+    if (wantsToBuy) events.push([t + 1000, 'goal', 'checkout_click', '/pricing', { plan: pick(['monthly', 'yearly']) }], [t + 2000, 'outbound', 'https://checkout.dodopayments.com/buy/pdt_pro', '/pricing']);
     else if (!bounce && rand() < 0.1) events.push([t, 'outbound', pick(['https://github.com/shipkit', 'https://x.com/shipkit', 'https://discord.gg/shipkit']), pages.at(-1)]);
     const goals = events.filter((e) => e[1] === 'goal').length;
     const last = Math.min(now, events.at(-1)[0] + 5000);
@@ -80,7 +80,7 @@ for (let d = 34; d >= 0; d--) {
     out.push(
       `INSERT INTO sessions (site_id, id, visitor_id, started_at, last_seen_at, duration, pageviews, goals, hostname, entry_page, exit_page, referrer, referrer_domain, source, channel, utm_source, utm_medium, utm_campaign, utm_term, utm_content, ref, country, region, city, browser, os, device) VALUES ('${siteId}', '${sid}', '${vid}', ${start}, ${last}, ${duration}, ${pages.length}, ${goals}, 'shipkit.dev', ${q(entry)}, ${q(pages.at(-1))}, ${q(s.referrer)}, ${q(s.domain)}, ${q(s.source)}, ${q(s.channel)}, ${q(camp ? s.source.toLowerCase() : null)}, ${q(camp ? 'social' : null)}, ${q(camp)}, NULL, NULL, NULL, '${country}', ${q(region)}, ${q(city)}, '${browser}', '${os}', '${device}');`,
     );
-    for (const [ts, type, n, p] of events) out.push(`INSERT INTO events (site_id, session_id, visitor_id, ts, type, name, path) VALUES ('${siteId}', '${sid}', '${vid}', ${ts}, '${type}', ${q(n)}, ${q(p)});`);
+    for (const [ts, type, n, p, props] of events) out.push(`INSERT INTO events (site_id, session_id, visitor_id, ts, type, name, path, props) VALUES ('${siteId}', '${sid}', '${vid}', ${ts}, '${type}', ${q(n)}, ${q(p)}, ${q(props ? JSON.stringify(props) : null)});`);
     if (paid) {
       const amount = pick([4900, 9900, 9900, 16900, 29900]);
       out.push(`INSERT INTO payments (id, site_id, provider, ts, amount, kind, currency, visitor_id, session_id, customer_id, email, name) VALUES ('pay_demo_${++payN}', '${siteId}', 'dodo', ${t + 60_000 > now ? now - 1000 : t + 60_000}, ${amount}, 'payment', 'USD', '${vid}', '${sid}', 'cus_${payN}', ${q(name.toLowerCase().replace(' ', '.') + '@example.com')}, ${q(name)});`);

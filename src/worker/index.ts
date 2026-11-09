@@ -6,7 +6,8 @@ import { handleEvent } from './collect';
 import { forgetSite, type AppEnv, type Site } from './env';
 import { passwordsMatch, randomId, signToken, verifyToken } from './lib/crypto';
 import { handleDodoWebhook, handleGoalApi, handlePaymentApi, rematchPayments } from './payments';
-import { breakdown, customers, funnel, makeCtx, overview, visitorGroups, visitorProfile, visitors, type FunnelStep } from './stats';
+import { breakdown, customers, funnel, goalReport, makeCtx, overview, visitorGroups, visitorProfile, visitors, type FunnelStep } from './stats';
+import type { FunnelSplit } from './goals';
 import { visitorTraitsTable } from './traits';
 
 const app = new Hono<AppEnv>();
@@ -250,8 +251,12 @@ app.get('/api/sites/:id/funnels/:fid/stats', async (c) => {
     .bind(c.req.param('fid'), c.get('site').id)
     .first<{ steps: string }>();
   if (!f) return c.json({ error: 'funnel not found' }, 404);
-  return c.json(await funnel(makeCtx(c), JSON.parse(f.steps)));
+  const split = c.req.query('split') ?? '';
+  const ok = split === '' || split === 'source' || split === 'entry_page' || /^prop:[\w.-]{1,64}$/.test(split);
+  return c.json(await funnel(makeCtx(c), JSON.parse(f.steps), (ok ? split : '') as FunnelSplit));
 });
+
+app.get('/api/sites/:id/goals/:name', async (c) => c.json(await goalReport(makeCtx(c), c.req.param('name').slice(0, 64))));
 
 app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
 

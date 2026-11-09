@@ -3,7 +3,9 @@ import { api, qs, type BreakdownRow } from '../lib/api';
 import { useDash } from '../lib/context';
 import { countryName, fmtAgo, fmtDateTime, fmtDuration, fmtNumber, fmtPct, shortId } from '../lib/format';
 import { useApi } from '../lib/useApi';
+import { GoalReport, propLabel } from './GoalReport';
 import { Avatar, BrowserIcon, DeviceIcon, Flag, OSIcon, SourceIcon } from './Icons';
+import { Modal } from './Modal';
 import { PlanBadge } from './PlanBadge';
 
 type Tab = 'goal' | 'funnel' | 'user' | 'journey';
@@ -36,6 +38,7 @@ export function GoalsPanel({ totalVisitors }: { totalVisitors: number }) {
 function Goals({ totalVisitors }: { totalVisitors: number }) {
   const { site, q, reloadKey, money, addFilter } = useDash();
   const { data } = useApi<BreakdownRow[]>(`/api/sites/${site.id}/breakdown?${qs(q, { dim: 'goal' })}`, reloadKey);
+  const [open, setOpen] = useState<string | null>(null);
   if (!data) return <div className="h-40 animate-pulse" />;
   if (!data.length)
     return (
@@ -45,6 +48,7 @@ function Goals({ totalVisitors }: { totalVisitors: number }) {
       </div>
     );
   return (
+    <>
     <table className="w-full text-sm">
       <thead>
         <tr className="text-left text-stone-500">
@@ -60,8 +64,10 @@ function Goals({ totalVisitors }: { totalVisitors: number }) {
       </thead>
       <tbody>
         {data.map((g) => (
-          <tr key={g.label} className="cursor-pointer border-t border-stone-100 hover:bg-stone-50" onClick={() => addFilter('goal', g.label ?? '')} title="Filter by visitors who completed this goal">
-            <td className="px-3 py-2.5 font-medium [overflow-wrap:anywhere]">🎯 {g.label}</td>
+          <tr key={g.label} className="cursor-pointer border-t border-stone-100 hover:bg-stone-50" onClick={() => setOpen(g.label ?? '')} title="See what led people to this goal">
+            <td className="px-3 py-2.5 font-medium [overflow-wrap:anywhere]">
+              🎯 {g.label} <span className="ml-1 text-xs font-normal text-stone-400">What led here ›</span>
+            </td>
             <td className="py-2.5 text-right">{fmtNumber(g.visitors)}</td>
             <td className="hidden py-2.5 text-right sm:table-cell">{fmtNumber(g.pageviews ?? 0)}</td>
             <td className="py-2.5 pl-2 text-right sm:pl-0">{totalVisitors ? fmtPct(g.visitors / totalVisitors, 1) : '—'}</td>
@@ -70,6 +76,20 @@ function Goals({ totalVisitors }: { totalVisitors: number }) {
         ))}
       </tbody>
     </table>
+    <Modal open={open !== null} onClose={() => setOpen(null)} title={<>🎯 {open}</>} width="max-w-4xl">
+      {open !== null && (
+        <GoalReport
+          key={open}
+          name={open}
+          totalVisitors={totalVisitors}
+          onFilter={() => {
+            addFilter('goal', open);
+            setOpen(null);
+          }}
+        />
+      )}
+    </Modal>
+    </>
   );
 }
 
@@ -86,10 +106,12 @@ function Funnels() {
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const current = funnels?.find((f) => f.id === selected) ?? funnels?.[0];
-  const { data: stats } = useApi<(FunnelDef['steps'][0] & { visitors: number })[]>(
-    current ? `/api/sites/${site.id}/funnels/${current.id}/stats?${qs(q)}` : null,
+  const [split, setSplit] = useState('');
+  const { data: result } = useApi<FunnelResult>(
+    current ? `/api/sites/${site.id}/funnels/${current.id}/stats?${qs(q, { split })}` : null,
     reloadKey + version,
   );
+  const stats = result?.steps;
 
   if (!funnels) return <div className="h-40 animate-pulse" />;
   if (creating || !funnels.length)
@@ -108,10 +130,27 @@ function Funnels() {
   return (
     <div className="px-3 pb-3">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <select className="input w-auto py-1.5" value={current?.id} onChange={(e) => setSelected(e.target.value)}>
+        <select
+          className="input w-auto py-1.5"
+          value={current?.id}
+          onChange={(e) => {
+            setSelected(e.target.value);
+            setSplit('');
+          }}
+        >
           {funnels.map((f) => (
             <option key={f.id} value={f.id}>
               {f.name}
+            </option>
+          ))}
+        </select>
+        <select className="input w-auto py-1.5" value={split} onChange={(e) => setSplit(e.target.value)} title="Compare groups of visitors through this funnel">
+          <option value="">No split</option>
+          <option value="source">Split by source</option>
+          <option value="entry_page">Split by landing page</option>
+          {(result?.splitKeys ?? []).map((k) => (
+            <option key={k} value={`prop:${k}`}>
+              Split by {propLabel(k).toLowerCase()}
             </option>
           ))}
         </select>
@@ -143,16 +182,76 @@ function Funnels() {
               </div>
               <div className="mt-2 truncate text-sm font-medium" title={s.value}>
                 {i + 1}. {s.type === 'goal' ? '🎯 ' : ''}
-                {s.value}
+                {stepName(s)}
               </div>
               <div className="text-sm text-stone-600">
-                {fmtNumber(s.visitors)} visitors · {fmtPct(pct)}
+                {fmtNumber(s.visitors)} visitors · {fmtPct(pct, pct < 0.1 ? 1 : 0)}
               </div>
-              {i > 0 && <div className="text-xs text-red-500 dark:text-red-400">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'} drop-off</div>}
+              {i > 0 && (
+                <div className="text-xs text-stone-500">
+                  {prev ? fmtPct(s.visitors / prev) : '0%'} of step {i} · <span className="text-red-500 dark:text-red-400">−{prev ? fmtPct(1 - s.visitors / prev) : '0%'}</span>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
+      {split && result && <FunnelGroups result={result} split={split} />}
+    </div>
+  );
+}
+
+interface FunnelResult {
+  steps: (FunnelDef['steps'][0] & { visitors: number })[];
+  groups: { label: string; counts: number[] }[];
+  splitKeys: string[];
+}
+
+const stepName = (s: FunnelDef['steps'][0]) => (s.type === 'page' && s.value === '/*' ? 'Any page' : s.value.replace(/\s*,\s*/g, ' or '));
+
+/** The funnel again, one row per group, so you can see which sources or buttons carry people through. */
+function FunnelGroups({ result, split }: { result: FunnelResult; split: string }) {
+  const { steps, groups } = result;
+  // Split by a goal's detail, the rows only start at that goal: people before it have no group yet.
+  const startAt = split.startsWith('prop:') ? Math.max(0, steps.findIndex((s) => s.type === 'goal')) : 0;
+  const head = split === 'source' ? 'Source' : split === 'entry_page' ? 'Landing page' : propLabel(split.slice(5));
+  if (!groups.length) return <p className="mt-6 text-center text-sm text-stone-400">Nobody to split in this period.</p>;
+  return (
+    <div className="mt-6 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-stone-500">
+            <th className="pb-2 pr-3 font-medium">{head}</th>
+            {steps.slice(startAt).map((s, i) => (
+              <th key={i} className="pb-2 pl-3 text-right font-medium" title={s.value}>
+                <span className="block max-w-[140px] truncate sm:ml-auto">
+                  {startAt + i + 1}. {stepName(s)}
+                </span>
+              </th>
+            ))}
+            <th className="pb-2 pl-3 text-right font-medium">Converted</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((g) => {
+            const first = g.counts[startAt];
+            const last = g.counts.at(-1)!;
+            return (
+              <tr key={g.label} className="border-t border-stone-100">
+                <td className="max-w-[260px] truncate py-2 pr-3 font-medium" title={g.label}>
+                  {g.label}
+                </td>
+                {g.counts.slice(startAt).map((c, i) => (
+                  <td key={i} className={`py-2 pl-3 text-right ${c ? '' : 'text-stone-300'}`}>
+                    {fmtNumber(c)}
+                  </td>
+                ))}
+                <td className={`py-2 pl-3 text-right font-medium ${last ? 'text-revenue' : 'text-stone-400'}`}>{first ? fmtPct(last / first, 1) : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -181,7 +280,10 @@ function FunnelForm({ onDone, canCancel }: { onDone: (id?: string) => void; canC
         }
       }}
     >
-      <p className="text-sm text-stone-500">Steps are counted in order per visitor. Page paths support wildcards like <code>/blog/*</code>.</p>
+      <p className="text-sm text-stone-500">
+        Steps are counted in order per visitor. Page paths support wildcards like <code>/blog/*</code> (<code>/*</code> is any page). A goal step can
+        accept either of several goals: <code>purchase, trial_start</code>.
+      </p>
       <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Funnel name" />
       {steps.map((s, i) => (
         <div key={i} className="flex gap-2">

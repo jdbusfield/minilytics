@@ -5,6 +5,7 @@ import { AD_RATE, AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
 import { ensureVisitorTraits, visitorTraitsTable } from './traits';
 import { sectionMatch } from '../shared/sections';
+import { funnelProgress, goalNames, summarizeGoal, type BeforeRow, type FunnelEvent, type FunnelSplit, type FunnelStep, type GoalRow } from './goals';
 
 /** Filters that live on the session row (clicking a row in the dashboard adds one of these). */
 const SESSION_FILTERS = [
@@ -534,23 +535,18 @@ export async function visitorProfile(db: D1Database, site: Site, vid: string) {
   };
 }
 
-export interface FunnelStep {
-  type: 'page' | 'goal';
-  value: string; // page paths support * wildcards, e.g. /blog/*
-  label?: string;
-}
+export type { FunnelStep };
 
-/** Visitors who completed each step, in order, within the period. */
-export async function funnel(ctx: Ctx, steps: FunnelStep[]) {
-  if (!steps.length) return [];
+/** Visitors who completed each step, in order, within the period (optionally split into groups). */
+export async function funnel(ctx: Ctx, steps: FunnelStep[], split: FunnelSplit = '') {
+  if (!steps.length) return funnelProgress([], steps, split);
   const f = visitSql(ctx);
-  const join = visitsNeedSessions(ctx) ? 'JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id' : '';
   const conds: string[] = [];
   const params: unknown[] = [];
   for (const st of steps) {
     if (st.type === 'goal') {
-      conds.push(`(e.type = 'goal' AND e.name = ?)`);
-      params.push(st.value);
+      conds.push(`(e.type = 'goal' AND e.name IN (SELECT value FROM json_each(?)))`);
+      params.push(JSON.stringify(goalNames(st.value)));
     } else {
       conds.push(`(e.type = 'pageview' AND e.path GLOB ?)`);
       params.push(st.value);
@@ -559,25 +555,40 @@ export async function funnel(ctx: Ctx, steps: FunnelStep[]) {
   const rows = (
     await ctx.db
       .prepare(
-        `SELECT e.visitor_id AS v, e.ts, e.type, e.name, e.path FROM events e ${join}
+        `SELECT e.visitor_id AS v, e.ts, e.type, e.name, e.path, e.props, s.source, s.entry_page
+         FROM events e JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id
          WHERE e.site_id = ? AND e.ts >= ? AND e.ts < ? AND (${conds.join(' OR ')})${f.sql}
          ORDER BY e.ts LIMIT 100000`,
       )
       .bind(ctx.site.id, ctx.range.from, ctx.range.to, ...params, ...f.params)
-      .all<{ v: string; ts: number; type: string; name: string | null; path: string }>()
+      .all<FunnelEvent>()
   ).results;
+  return funnelProgress(rows, steps, split);
+}
 
-  const matchers = steps.map((st) => {
-    if (st.type === 'goal') return (r: (typeof rows)[0]) => r.type === 'goal' && r.name === st.value;
-    const re = new RegExp('^' + st.value.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
-    return (r: (typeof rows)[0]) => r.type === 'pageview' && re.test(r.path);
-  });
-  const progress = new Map<string, number>();
-  for (const r of rows) {
-    const at = progress.get(r.v) ?? 0;
-    if (at < steps.length && matchers[at](r)) progress.set(r.v, at + 1);
-  }
-  const counts = steps.map(() => 0);
-  for (const reached of progress.values()) for (let i = 0; i < reached; i++) counts[i]++;
-  return steps.map((st, i) => ({ ...st, visitors: counts[i] }));
+/** What led people to one goal: the page, the button, where they came from, what they read first. */
+export async function goalReport(ctx: Ctx, name: string) {
+  const f = visitSql(ctx);
+  const base = `FROM events e JOIN sessions s ON s.site_id = e.site_id AND s.id = e.session_id
+    WHERE e.site_id = ? AND e.type = 'goal' AND e.name = ? AND e.ts >= ? AND e.ts < ?${f.sql}`;
+  const params = [ctx.site.id, name, ctx.range.from, ctx.range.to, ...f.params];
+  const [g, b] = await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `SELECT e.visitor_id, e.session_id, e.ts, e.path, e.props, s.source, s.referrer_domain, s.entry_page,
+                (SELECT COUNT(*) FROM sessions s2 WHERE s2.site_id = s.site_id AND s2.visitor_id = s.visitor_id AND s2.started_at <= s.started_at) AS visit_no
+         ${base} ORDER BY e.ts LIMIT 20000`,
+      )
+      .bind(...params),
+    // Pages seen in the same visit up to its first completion (the page it happened on included).
+    ctx.db
+      .prepare(
+        `SELECT DISTINCT pv.visitor_id, pv.path
+         FROM (SELECT e.session_id AS sid, MIN(e.ts) AS ts ${base} GROUP BY e.session_id) g
+         JOIN events pv ON pv.site_id = ? AND pv.session_id = g.sid AND pv.type = 'pageview' AND pv.ts <= g.ts
+         LIMIT 50000`,
+      )
+      .bind(...params, ctx.site.id),
+  ]);
+  return summarizeGoal(g.results as unknown as GoalRow[], b.results as unknown as BeforeRow[]);
 }
