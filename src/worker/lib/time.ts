@@ -145,3 +145,47 @@ export function bucketLabels(range: Range, offsetMs: number): string[] {
   }
   return labels;
 }
+
+/**
+ * A narrower window inside the period, picked on the dashboard: one chart bar ("hour:2026-11-13T14:00",
+ * "day:2026-11-13", "week:2026-11-09", "month:2026-11", all in site time) or the live boxes ("30m", "5m").
+ * The tables below the chart use it; the chart itself keeps the whole period.
+ * `active` means "visits seen in the window" (like the live boxes) rather than "visits that started in it"
+ * (like the chart bars).
+ */
+export interface Slice {
+  from: number;
+  to: number;
+  active: boolean;
+}
+
+export function resolveSlice(slice: string | undefined, range: Range, tz: string, now = Date.now()): Slice | null {
+  if (!slice) return null;
+  const live = /^(\d{1,3})m$/.exec(slice);
+  if (live) {
+    const mins = Math.min(Number(live[1]), 24 * 60);
+    return mins > 0 ? { from: now - mins * 60_000, to: now, active: true } : null;
+  }
+  const m = /^(hour|day|week|month):(\d{4})-(\d{2})(?:-(\d{2}))?(?:T(\d{2}):00)?$/.exec(slice);
+  if (!m) return null;
+  const [, g, y, mo, d, h] = m;
+  // Local wall-clock start and end of the bucket, then shifted to UTC with the offset at that moment.
+  let start: number;
+  let end: number;
+  if (g === 'hour') {
+    if (!d || !h) return null;
+    start = Date.UTC(+y, +mo - 1, +d, +h);
+    end = start + HOUR;
+  } else if (g === 'month') {
+    if (d) return null;
+    start = Date.UTC(+y, +mo - 1, 1);
+    end = Date.UTC(+y, +mo, 1);
+  } else {
+    if (!d || h) return null;
+    start = Date.UTC(+y, +mo - 1, +d);
+    end = start + (g === 'week' ? 7 : 1) * DAY;
+  }
+  const from = Math.max(range.from, start - tzOffset(tz, start));
+  const to = Math.min(range.to, end - tzOffset(tz, end));
+  return to > from ? { from, to, active: false } : null;
+}

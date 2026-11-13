@@ -7,7 +7,7 @@ import { Toolbar } from '../components/Toolbar';
 import { VisitorModal } from '../components/VisitorModal';
 import { qs, type Overview, type Site } from '../lib/api';
 import { DashContext, type Dash } from '../lib/context';
-import { fmtMoney } from '../lib/format';
+import { bucketLabel, fmtMoney } from '../lib/format';
 import { useApi } from '../lib/useApi';
 import { useQueryState } from '../lib/useQueryState';
 import { sectionsFor } from '../../shared/sections';
@@ -38,7 +38,8 @@ export function Dashboard({ siteId }: { siteId: string }) {
   const [visitor, setVisitor] = useState<string | null>(null);
   const { data: sites } = useApi<Site[]>('/api/sites');
   const site = sites?.find((s) => s.id === siteId);
-  const { data: overview, loading } = useApi<Overview>(site ? `/api/sites/${siteId}/overview?${qs(q)}` : null, reloadKey);
+  // The chart always shows the whole period; a picked bar only narrows the tables under it.
+  const { data: overview, loading } = useApi<Overview>(site ? `/api/sites/${siteId}/overview?${qs({ ...q, slice: undefined })}` : null, reloadKey);
 
   const addFilter = useCallback((key: string, value: string) => update({ filters: { ...q.filters, [key]: value } }), [q.filters, update]);
   const removeFilter = (key: string) => {
@@ -113,8 +114,25 @@ export function Dashboard({ siteId }: { siteId: string }) {
         )}
 
         <div className="mt-5">
-          <OverviewCard data={overview} />
+          <OverviewCard data={overview} slice={q.slice} onSlice={(slice) => update({ slice })} />
         </div>
+
+        {q.slice && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+            <span className="flex items-center gap-2 rounded-xl border border-visitors/50 bg-visitors/15 py-1 pl-3 pr-1 shadow-card">
+              <span className="text-stone-500">Tables below show</span>
+              <span className="font-medium">{sliceLabel(q.slice)}</span>
+              <button
+                className="rounded-lg px-1.5 text-stone-400 hover:bg-stone-100 hover:text-ink"
+                onClick={() => update({ slice: undefined })}
+                aria-label="Show the whole period"
+              >
+                ✕
+              </button>
+            </span>
+            <span className="text-xs text-stone-400">Click it again or ✕ for the whole period</span>
+          </div>
+        )}
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <Panel
@@ -163,4 +181,16 @@ export function Dashboard({ siteId }: { siteId: string }) {
       <VisitorModal key={visitor ?? 'none'} visitorId={visitor} onClose={() => setVisitor(null)} />
     </DashContext.Provider>
   );
+}
+
+/** "Nov 13, 2 PM to 3 PM", "the last 30 minutes", "Fri, Nov 13", "Week of 09 Nov". */
+function sliceLabel(slice: string): string {
+  const live = /^(\d+)m$/.exec(slice);
+  if (live) return `the last ${live[1]} minutes`;
+  const [g, bucket] = [slice.slice(0, slice.indexOf(':')), slice.slice(slice.indexOf(':') + 1)];
+  if (g === 'hour') {
+    const next = new Date(new Date(bucket + ':00Z').getTime() + 3_600_000).toISOString().slice(0, 16);
+    return `${bucketLabel(bucket, 'hour', true)} to ${bucketLabel(next, 'hour')}`;
+  }
+  return bucketLabel(bucket, g, true);
 }

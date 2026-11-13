@@ -4,7 +4,7 @@ import { classify } from '../src/shared/sources';
 import { adSourceName, computeAdRates } from '../src/worker/ads';
 import { belongsTo, normalizePath } from '../src/worker/collect';
 import { verifyStandardWebhook } from '../src/worker/lib/crypto';
-import { bucketLabels, resolveRange, startOfDay, tzOffset } from '../src/worker/lib/time';
+import { bucketLabels, resolveRange, resolveSlice, startOfDay, tzOffset } from '../src/worker/lib/time';
 import { isBot, parseUA } from '../src/worker/lib/ua';
 
 describe('classify', () => {
@@ -83,6 +83,37 @@ describe('time ranges', () => {
   it('weekly buckets start on Monday', () => {
     const r = resolveRange({ period: '30d', granularity: 'week' }, 'UTC', 0, now);
     for (const l of bucketLabels(r, 0)) expect(new Date(l + 'T00:00:00Z').getUTCDay()).toBe(1);
+  });
+});
+
+describe('slices (a clicked bar or live box)', () => {
+  const now = Date.UTC(2026, 10, 13, 20, 10); // 13 Nov 2026 12:10 PM Los Angeles (UTC-8)
+  const tz = 'America/Los_Angeles';
+  const today = resolveRange({ period: 'today' }, tz, 0, now);
+  it('an hour bar is that local hour', () => {
+    expect(resolveSlice('hour:2026-11-13T09:00', today, tz, now)).toEqual({ from: Date.UTC(2026, 10, 13, 17), to: Date.UTC(2026, 10, 13, 18), active: false });
+  });
+  it('the current hour stops at now', () => {
+    expect(resolveSlice('hour:2026-11-13T12:00', today, tz, now)?.to).toBe(now);
+  });
+  it('a bar outside the period gives nothing', () => {
+    expect(resolveSlice('hour:2026-11-12T09:00', today, tz, now)).toBeNull();
+  });
+  it('day, week and month bars use local midnights', () => {
+    const r = resolveRange({ period: '90d' }, tz, 0, now);
+    expect(resolveSlice('day:2026-11-02', r, tz, now)).toMatchObject({ from: Date.UTC(2026, 10, 2, 8), to: Date.UTC(2026, 10, 3, 8) });
+    // The DST change on 1 Nov: October starts at UTC-7.
+    expect(resolveSlice('month:2026-10', r, tz, now)).toMatchObject({ from: Date.UTC(2026, 9, 1, 7), to: Date.UTC(2026, 10, 1, 7) });
+    expect(resolveSlice('week:2026-11-09', r, tz, now)).toMatchObject({ from: Date.UTC(2026, 10, 9, 8), to: now });
+  });
+  it('live boxes are the last N minutes, counted by activity', () => {
+    expect(resolveSlice('30m', today, tz, now)).toEqual({ from: now - 30 * 60_000, to: now, active: true });
+    expect(resolveSlice('5m', today, tz, now)?.from).toBe(now - 5 * 60_000);
+  });
+  it('ignores junk', () => {
+    for (const s of ['', 'hour:2026-11-13', 'day:2026-11-13T09:00', 'month:2026-11-01', 'year:2026', '0m', "day:1' OR 1"]) {
+      expect(resolveSlice(s, today, tz, now)).toBeNull();
+    }
   });
 });
 

@@ -15,6 +15,7 @@ function read(): Query {
     granularity: p.get('granularity') || undefined,
     filters,
     everyone: p.get('all') === '1',
+    slice: p.get('slice') || undefined,
   };
 }
 
@@ -34,6 +35,8 @@ export function useQueryState() {
         next.from = undefined;
         next.to = undefined;
       }
+      // A picked bar belongs to the old chart; a new period or granularity drops it.
+      if (!('slice' in patch) && (patch.period || patch.from || patch.to || 'granularity' in patch)) next.slice = undefined;
       const p = new URLSearchParams();
       p.set('period', next.period);
       if (next.from) p.set('from', next.from);
@@ -41,6 +44,7 @@ export function useQueryState() {
       if (next.granularity) p.set('granularity', next.granularity);
       if (Object.keys(next.filters).length) p.set('filters', JSON.stringify(next.filters));
       if (next.everyone) p.set('all', '1');
+      if (next.slice) p.set('slice', next.slice);
       window.history.replaceState(null, '', `${window.location.pathname}?${p}`);
       return next;
     });

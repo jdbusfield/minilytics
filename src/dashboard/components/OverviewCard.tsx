@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Area, Bar, CartesianGrid, ComposedChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, CartesianGrid, ComposedChart, ReferenceArea, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Kpis, Overview } from '../lib/api';
 import { useDash } from '../lib/context';
 import { bucketLabel, fmtDuration, fmtNumber, fmtPct } from '../lib/format';
@@ -19,7 +19,11 @@ function Change({ cur, prev, invert = false }: { cur: number; prev: number; inve
   );
 }
 
-export function OverviewCard({ data }: { data: Overview | null }) {
+/**
+ * `slice` is the bar (or live box) the tables below are narrowed to; clicking it again clears it.
+ * Bars are "<granularity>:<bucket>", live boxes "30m" / "5m".
+ */
+export function OverviewCard({ data, slice, onSlice }: { data: Overview | null; slice?: string; onSlice: (slice: string | undefined) => void }) {
   const { money } = useDash();
   const [hidden, setHidden] = useState<Record<Metric, boolean>>({ visitors: false, revenue: false });
   const c = data?.current;
@@ -37,6 +41,8 @@ export function OverviewCard({ data }: { data: Overview | null }) {
     : [];
 
   const g = data?.range.granularity ?? 'day';
+  const pick = (s: string) => onSlice(slice === s ? undefined : s);
+  const picked = slice?.startsWith(`${g}:`) ? slice.slice(g.length + 1) : null;
 
   return (
     <div className="card overflow-hidden">
@@ -75,15 +81,23 @@ export function OverviewCard({ data }: { data: Overview | null }) {
         ))}
         {data &&
           [
-            { label: 'Last 30 min', value: data.online30, cls: 'xl:border-r' },
-            { label: 'Last 5 min', value: data.online, cls: '' },
+            { label: 'Last 30 min', value: data.online30, cls: 'xl:border-r', slice: '30m' },
+            { label: 'Last 5 min', value: data.online, cls: '', slice: '5m' },
           ].map((o) => (
-            <div key={o.label} className={`border-stone-100 px-4 py-3 sm:px-5 sm:py-4 ${o.cls}`} title={`Visitors active in the ${o.label.toLowerCase()}`}>
+            <button
+              key={o.label}
+              className={`border-stone-100 px-4 py-3 text-left sm:px-5 sm:py-4 ${o.cls} ${
+                slice === o.slice ? 'bg-visitors/15 shadow-[inset_0_-3px_0_#7cb1ea]' : 'hover:bg-stone-50'
+              }`}
+              onClick={() => pick(o.slice)}
+              title={slice === o.slice ? 'Show the whole period below' : `Show only the ${o.label.toLowerCase()} in the tables below`}
+              aria-pressed={slice === o.slice}
+            >
               <div className="flex items-center gap-1.5 text-sm text-stone-500">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" /> {o.label}
               </div>
               <div className="mt-1 text-2xl font-semibold sm:text-[28px] leading-tight">{fmtNumber(o.value)}</div>
-            </div>
+            </button>
           ))}
         {!data && <div className="col-span-full h-[98px] animate-pulse bg-stone-50" />}
       </div>
@@ -91,7 +105,15 @@ export function OverviewCard({ data }: { data: Overview | null }) {
       <div className="h-[260px] px-2 pb-3 pt-6 sm:h-[340px] sm:px-4">
         {data && (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data.series} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
+            <ComposedChart
+              data={data.series}
+              margin={{ top: 5, right: 5, left: 0, bottom: 0 }}
+              style={{ cursor: 'pointer' }}
+              onClick={(e) => {
+                const b = e?.activeLabel;
+                if (b) pick(`${g}:${b}`);
+              }}
+            >
               <defs>
                 <linearGradient id="vis" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#8dbdf0" stopOpacity={0.35} />
@@ -99,6 +121,7 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="4 4" />
+              {picked && <ReferenceArea yAxisId="v" x1={picked} x2={picked} fill="#7cb1ea" fillOpacity={0.28} strokeOpacity={0} ifOverflow="visible" />}
               <XAxis
                 dataKey="bucket"
                 tickFormatter={(b) => bucketLabel(b, g)}
@@ -142,6 +165,9 @@ export function OverviewCard({ data }: { data: Overview | null }) {
                       {d.adActual > 0 && <Row color="bg-ads" label="Ads" value={money(d.adActual)} />}
                       {d.adEst > 0 && <Row color="bg-adsEst" label="Ads (estimated)" value={money(d.adEst)} />}
                       {d.payments > 0 && <Row color="bg-revenueSoft" label="Payments" value={String(d.payments)} />}
+                      <div className="mt-2 border-t border-stone-100 pt-2 text-xs text-stone-400">
+                        {picked === d.bucket ? 'Click to show the whole period below' : 'Click to show only this in the tables below'}
+                      </div>
                     </div>
                   );
                 }}

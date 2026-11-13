@@ -86,6 +86,8 @@ export interface Query {
   filters: Filters;
   /** Include visits that never had real mouse, touch or key input (crawlers). Off by default. */
   everyone?: boolean;
+  /** A clicked chart bar ("hour:2026-11-13T14:00") or live box ("30m", "5m"): narrows the tables, not the chart. */
+  slice?: string;
 }
 
 export function qs(q: Query, extra: Record<string, string | number> = {}) {
@@ -96,6 +98,7 @@ export function qs(q: Query, extra: Record<string, string | number> = {}) {
   if (q.granularity) p.set('granularity', q.granularity);
   if (Object.keys(q.filters).length) p.set('filters', JSON.stringify(q.filters));
   if (!q.everyone) p.set('humans', '1');
+  if (q.slice) p.set('slice', q.slice);
   for (const [k, v] of Object.entries(extra)) p.set(k, String(v));
   return p.toString();
 }

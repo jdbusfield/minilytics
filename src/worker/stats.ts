@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { AppEnv, Site } from './env';
-import { bucketLabels, bucketSql, resolveRange, tzOffset, type Range } from './lib/time';
+import { bucketLabels, bucketSql, resolveRange, resolveSlice, tzOffset, type Range } from './lib/time';
 import { AD_RATE, AD_RATE_JOINS } from './ads';
 import { currencyDecimals } from './payments';
 import { ensureVisitorTraits, visitorTraitsTable } from './traits';
@@ -87,6 +87,8 @@ interface Ctx {
   /** Count only visits with real mouse, touch or key input. Payments ignore this: the money is real either way. */
   humans: boolean;
   offset: number;
+  /** A live-box slice ("last 30 min"): count visits seen in the window, not only those that started in it. */
+  active: boolean;
 }
 
 /** filterSql plus the humans-only condition: for anything that counts visits. */
@@ -96,22 +98,35 @@ function visitSql(ctx: Ctx) {
 }
 const visitsNeedSessions = (ctx: Ctx) => ctx.humans || hasFilters(ctx.filters);
 
-export function makeCtx(c: Context<AppEnv>): Ctx {
+export function makeCtx(c: Context<AppEnv>, opts: { slice?: boolean } = {}): Ctx {
   const site = c.get('site');
   const q = c.req.query();
-  const range = resolveRange(q, site.timezone, site.created_at);
+  const period = resolveRange(q, site.timezone, site.created_at);
+  // A clicked chart bar or live box narrows the window; the granularity and offset stay the period's.
+  const slice = opts.slice === false ? null : resolveSlice(q.slice, period, site.timezone);
+  const range = slice ? { ...period, from: slice.from, to: slice.to } : period;
   return {
     db: c.env.DB,
     site,
     range,
     filters: parseFilters(q.filters, site.domain),
     humans: q.humans === '1',
-    offset: tzOffset(site.timezone, range.to),
+    offset: tzOffset(site.timezone, period.to),
+    active: slice?.active ?? false,
   };
 }
 
+const LIVE_LOOKBACK = 6 * 3_600_000;
+
 function sessionsWhere(ctx: Ctx, from = ctx.range.from, to = ctx.range.to) {
   const f = visitSql(ctx);
+  if (ctx.active) {
+    // Same rule as the live boxes in overview(): seen in the window, started in the last 6 hours.
+    return {
+      sql: `s.site_id = ? AND s.started_at > ? AND s.started_at < ? AND s.last_seen_at > ?${f.sql}`,
+      params: [ctx.site.id, to - LIVE_LOOKBACK, to, from, ...f.params],
+    };
+  }
   return {
     sql: `s.site_id = ? AND s.started_at >= ? AND s.started_at < ?${f.sql}`,
     params: [ctx.site.id, from, to, ...f.params],
@@ -227,7 +242,7 @@ export async function overview(ctx: Ctx) {
         `SELECT COUNT(DISTINCT CASE WHEN last_seen_at > ? THEN visitor_id END) AS n5, COUNT(DISTINCT visitor_id) AS n30
          FROM sessions WHERE site_id = ? AND started_at > ? AND last_seen_at > ?${ctx.humans ? ' AND human = 1' : ''}`,
       )
-      .bind(now - 5 * 60_000, site.id, now - 6 * 3_600_000, now - 30 * 60_000),
+      .bind(now - 5 * 60_000, site.id, now - LIVE_LOOKBACK, now - 30 * 60_000),
     db
       .prepare(
         `SELECT ${sb} AS b, COUNT(DISTINCT s.visitor_id) AS visitors, COUNT(*) AS sessions, SUM(s.pageviews) AS pageviews

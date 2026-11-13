@@ -204,7 +204,7 @@ app.delete('/api/sites/:id', async (c) => {
 
 // ---------- stats
 
-app.get('/api/sites/:id/overview', async (c) => c.json(await overview(makeCtx(c))));
+app.get('/api/sites/:id/overview', async (c) => c.json(await overview(makeCtx(c, { slice: false }))));
 
 app.get('/api/sites/:id/breakdown', async (c) => {
   try {
