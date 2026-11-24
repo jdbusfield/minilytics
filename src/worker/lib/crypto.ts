@@ -72,6 +72,10 @@ export async function verifyToken(secret: string, token: string | undefined): Pr
   return safeEqual(expected, token) ? value : null;
 }
 
-export function passwordsMatch(a: string, b: string): boolean {
-  return safeEqual(a, b);
+/**
+ * Spaces and line breaks around either side are ignored: the Cloudflare secret box is a
+ * multi-line field, so a stray Enter or a pasted trailing space would otherwise lock the owner out.
+ */
+export function passwordsMatch(typed: string, stored: string): boolean {
+  return safeEqual(typed.trim(), stored.trim());
 }

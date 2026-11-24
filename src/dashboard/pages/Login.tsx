@@ -6,6 +6,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [show, setShow] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,7 +31,22 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         <label className="label mt-6" htmlFor="pw">
           Password
         </label>
-        <input id="pw" type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+        {/* A fixed user name so password managers file this under its own entry, not another login on the same domain. */}
+        <input type="text" name="username" autoComplete="username" value="admin" readOnly hidden />
+        <input
+          id="pw"
+          name="password"
+          type={show ? 'text' : 'password'}
+          autoComplete="current-password"
+          className="input"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoFocus
+        />
+        <label className="mt-2 flex items-center gap-2 text-sm text-stone-500">
+          <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} />
+          Show password
+        </label>
         {error && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</p>}
         <button className="btn-dark mt-6 w-full" disabled={busy || !password}>
           {busy ? 'Signing in…' : 'Sign in'}
